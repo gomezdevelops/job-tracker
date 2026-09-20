@@ -20,6 +20,9 @@ function Dashboard() {
   const [matchAnalytics, setMatchAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [insights, setInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState("");
 
   useEffect(() => {
     async function loadDashboard() {
@@ -76,6 +79,23 @@ function Dashboard() {
             : application
         )
       );
+      async function loadInsights() {
+        setInsightsLoading(true);
+        setInsightsError("");
+
+        try {
+          const response = await api.get("/analytics/insights");
+          setInsights(response.data);
+        } catch (error) {
+          setInsightsError(
+            error.response?.data?.detail || "Failed to load application insights."
+          );
+        } finally {
+          setInsightsLoading(false);
+        }
+      }
+      loadInsights();
+
 
       // Refresh summary counts
       const summaryResponse = await api.get(
@@ -94,6 +114,18 @@ function Dashboard() {
 
   const preferredSkillGaps =
     matchAnalytics?.skill_gaps?.preferred || [];
+  
+  const priorityCounts = {
+    high: applications.filter(
+      (application) => application.priority === "high"
+    ).length,
+    medium: applications.filter(
+      (application) => application.priority === "medium"
+    ).length,
+    low: applications.filter(
+      (application) => application.priority === "low"
+    ).length,
+  };
 
   const upcomingDeadlines = applications
     .filter((application) => application.deadline)
@@ -192,6 +224,8 @@ function Dashboard() {
             }
           />
         </section>
+
+
 
         {/* Urgent Applications */}
         <section className="mt-8">
@@ -383,6 +417,74 @@ function Dashboard() {
           </div>
         </section>
 
+        {/* Priority Overview */}
+        <section className="mt-8">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <div>
+              <h3 className="text-lg font-semibold">
+                Priority Overview
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                See how your applications are prioritized.
+              </p>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <Link
+                to="/applications"
+                className="rounded-xl bg-slate-950 p-5 transition hover:bg-slate-800"
+              >
+                <p className="text-sm text-red-400">
+                  High Priority
+                </p>
+
+                <p className="mt-2 text-3xl font-bold">
+                  {priorityCounts.high}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Needs the most attention
+                </p>
+              </Link>
+
+              <Link
+                to="/applications"
+                className="rounded-xl bg-slate-950 p-5 transition hover:bg-slate-800"
+              >
+                <p className="text-sm text-yellow-400">
+                  Medium Priority
+                </p>
+
+                <p className="mt-2 text-3xl font-bold">
+                  {priorityCounts.medium}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Worth following up
+                </p>
+              </Link>
+
+              <Link
+                to="/applications"
+                className="rounded-xl bg-slate-950 p-5 transition hover:bg-slate-800"
+              >
+                <p className="text-sm text-slate-400">
+                  Low Priority
+                </p>
+
+                <p className="mt-2 text-3xl font-bold">
+                  {priorityCounts.low}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Keep on your radar
+                </p>
+              </Link>
+            </div>
+          </div>
+        </section>
+
         {/* Deadlines */}
         <section className="mt-8">
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
@@ -475,6 +577,211 @@ function Dashboard() {
             </div>
           </div>
         </section>
+
+        <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold">Application Insights</h2>
+            <p className="mt-1 text-sm text-gray-400">
+              A quick overview of your application activity and resume matching.
+            </p>
+          </div>
+
+          {insightsLoading && (
+            <p className="text-sm text-gray-400">
+              Loading insights...
+            </p>
+          )}
+
+          {insightsError && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+              {insightsError}
+            </div>
+          )}
+
+          {insights && !insightsLoading && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+                <p className="text-sm text-gray-400">Applications</p>
+                <p className="mt-2 text-3xl font-bold">
+                  {insights.total_applications}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+                <p className="text-sm text-gray-400">Analyzed</p>
+                <p className="mt-2 text-3xl font-bold">
+                  {insights.analyzed_applications}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+                <p className="text-sm text-gray-400">Average Match</p>
+                <p className="mt-2 text-3xl font-bold">
+                  {insights.average_match_score !== null
+                    ? `${insights.average_match_score}%`
+                    : "—"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+                <p className="text-sm text-gray-400">High Priority</p>
+                <p className="mt-2 text-3xl font-bold">
+                  {insights.priority_counts?.high || 0}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {insights && (
+            <div className="mt-6 grid gap-6 md:grid-cols-2">
+              <div>
+                <h3 className="mb-3 text-sm font-medium text-gray-300">
+                  Application Status
+                </h3>
+
+                <div className="space-y-2">
+                  {Object.entries(insights.status_counts || {}).map(
+                    ([status, count]) => (
+                      <div
+                        key={status}
+                        className="flex items-center justify-between rounded-lg bg-black/20 px-4 py-3"
+                      >
+                        <span className="capitalize text-sm text-gray-300">
+                          {status}
+                        </span>
+
+                        <span className="font-semibold">
+                          {count}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-sm font-medium text-gray-300">
+                  Priority Distribution
+                </h3>
+
+                <div className="space-y-2">
+                  {Object.entries(insights.priority_counts || {}).map(
+                    ([priority, count]) => (
+                      <div
+                        key={priority}
+                        className="flex items-center justify-between rounded-lg bg-black/20 px-4 py-3"
+                      >
+                        <span className="capitalize text-sm text-gray-300">
+                          {priority}
+                        </span>
+
+                        <span className="font-semibold">
+                          {count}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {insights?.ai_insights && (
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            {/* AI Summary */}
+            <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-5 lg:col-span-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">AI</span>
+                <h3 className="font-semibold">AI Application Summary</h3>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-gray-300">
+                {insights.ai_insights.summary}
+              </p>
+            </div>
+
+            {/* Recommendations */}
+            <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+              <h3 className="font-semibold">Recommendations</h3>
+
+              <div className="mt-4 space-y-3">
+                {insights.ai_insights.recommendations?.map(
+                  (recommendation, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-white/10 bg-white/5 p-3"
+                    >
+                      <p className="text-sm leading-5 text-gray-300">
+                        {recommendation}
+                      </p>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Positive Patterns */}
+            <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+              <h3 className="font-semibold">Positive Patterns</h3>
+
+              <div className="mt-4 space-y-3">
+                {insights.ai_insights.positive_patterns?.map(
+                  (pattern, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-white/10 bg-white/5 p-3"
+                    >
+                      <p className="text-sm leading-5 text-gray-300">
+                        {pattern}
+                      </p>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Areas to Improve */}
+            <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+              <h3 className="font-semibold">Areas to Improve</h3>
+
+              <div className="mt-4 space-y-3">
+                {insights.ai_insights.areas_to_improve?.map(
+                  (area, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-white/10 bg-white/5 p-3"
+                    >
+                      <p className="text-sm leading-5 text-gray-300">
+                        {area}
+                      </p>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Next Actions */}
+            <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+              <h3 className="font-semibold">Suggested Next Actions</h3>
+
+              <div className="mt-4 space-y-3">
+                {insights.ai_insights.next_actions?.map(
+                  (action, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-white/10 bg-white/5 p-3"
+                    >
+                      <p className="text-sm leading-5 text-gray-300">
+                        {action}
+                      </p>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {/* AI Match Overview */}
         <section className="mt-8">
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">

@@ -83,6 +83,7 @@ class ResumeResponse(BaseModel):
 
 class JobMatchResponse(BaseModel):
     score: int
+    ai_analysis: dict | None = None
     matched_skills: list[str]
     missing_skills: list[str]
     resume_skills: list[str]

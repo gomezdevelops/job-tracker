@@ -8,6 +8,7 @@ const initialForm = {
   jd_text: "",
   jd_url: "",
   status: "saved",
+  priority: "medium",
   date_applied: "",
   deadline: "",
   notes: "",
@@ -22,6 +23,100 @@ const statusLabels = {
   rejected: "Rejected",
 };
 
+function ApplicationProgress({ status }) {
+  const stages = [
+    { key: "saved", label: "Saved" },
+    { key: "applied", label: "Applied" },
+    { key: "screening", label: "Screening" },
+    { key: "interview", label: "Interview" },
+    { key: "offer", label: "Offer" },
+  ];
+
+  const isRejected = status === "rejected";
+  const currentIndex = stages.findIndex((stage) => stage.key === status);
+
+  return (
+    <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+      <div>
+        <h2 className="text-xl font-semibold">Application Progress</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Track the current stage of this application.
+        </p>
+      </div>
+
+      {isRejected ? (
+        <div className="mt-8">
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-red-500 bg-red-500/10 text-red-400">
+              ✕
+            </div>
+
+            <div>
+              <p className="font-semibold text-red-300">
+                Application Rejected
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                This application is no longer active.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-8 overflow-x-auto">
+          <div className="flex min-w-[650px] items-start">
+            {stages.map((stage, index) => {
+              const completed = currentIndex >= index;
+              const current = status === stage.key;
+
+              return (
+                <div
+                  key={stage.key}
+                  className="flex flex-1 items-start"
+                >
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-semibold ${
+                        completed
+                          ? "border-blue-500 bg-blue-600 text-white"
+                          : "border-slate-700 bg-slate-950 text-slate-500"
+                      } ${
+                        current
+                          ? "ring-4 ring-blue-500/20"
+                          : ""
+                      }`}
+                    >
+                      {completed ? "✓" : index + 1}
+                    </div>
+
+                    <p
+                      className={`mt-3 text-xs font-medium ${
+                        completed
+                          ? "text-slate-200"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {stage.label}
+                    </p>
+                  </div>
+
+                  {index < stages.length - 1 && (
+                    <div
+                      className={`mt-4 h-0.5 flex-1 ${
+                        currentIndex > index
+                          ? "bg-blue-500"
+                          : "bg-slate-800"
+                      }`}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 function ApplicationDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -37,6 +132,18 @@ function ApplicationDetails() {
   const [matchResult, setMatchResult] = useState(null);
   const [matching, setMatching] = useState(false);
   const [matchError, setMatchError] = useState("");
+  const [jobAnalysis, setJobAnalysis] = useState(null);
+  const [jobAnalysisLoading, setJobAnalysisLoading] = useState(false);
+  const [jobAnalysisError, setJobAnalysisError] = useState("");
+  const [tailoringResult, setTailoringResult] = useState(null);
+  const [tailoringLoading, setTailoringLoading] = useState(false);
+  const [tailoringError, setTailoringError] = useState("");
+  const [coverLetter, setCoverLetter] = useState(null);
+  const [coverLetterLoading, setCoverLetterLoading] = useState(false);
+  const [coverLetterError, setCoverLetterError] = useState("");
+  const [interviewPrep, setInterviewPrep] = useState(null);
+  const [interviewPrepLoading, setInterviewPrepLoading] = useState(false);
+  const [interviewPrepError, setInterviewPrepError] = useState("");
   const [loadingSavedMatch, setLoadingSavedMatch] = useState(false);
   const [matchHistory, setMatchHistory] = useState([]);
   const [loadingMatchHistory, setLoadingMatchHistory] = useState(true);
@@ -84,6 +191,7 @@ function ApplicationDetails() {
           jd_text: application.jd_text ?? "",
           jd_url: application.jd_url ?? "",
           status: application.status ?? "saved",
+          priority: application.priority ?? "medium",
           date_applied: application.date_applied ?? "",
           deadline: application.deadline ?? "",
           notes: application.notes ?? "",
@@ -252,6 +360,7 @@ function ApplicationDetails() {
         jd_text: form.jd_text.trim() || null,
         jd_url: form.jd_url.trim() || null,
         status: form.status,
+        priority: form.priority,
         date_applied: form.date_applied || null,
         deadline: form.deadline || null,
         notes: form.notes.trim() || null,
@@ -296,6 +405,128 @@ function ApplicationDetails() {
       console.error("Unable to load match history:", error);
     } finally {
       setLoadingMatchHistory(false);
+    }
+  }
+
+  async function handleAnalyzeJob() {
+    if (!form.jd_text.trim()) {
+      setJobAnalysisError(
+        "Add a job description before analyzing it."
+      );
+      return;
+    }
+
+    setJobAnalysisLoading(true);
+    setJobAnalysisError("");
+
+    try {
+      const response = await api.get(
+        `/applications/${id}/analyze-jd`
+      );
+
+      setJobAnalysis(response.data);
+    } catch (error) {
+      console.error(error);
+
+      setJobAnalysisError(
+        error.response?.data?.detail ||
+          "Unable to analyze job description."
+      );
+    } finally {
+      setJobAnalysisLoading(false);
+    }
+  }
+
+  async function handleTailorResume() {
+    if (!selectedResume) {
+      setTailoringError("Please select a resume first.");
+      return;
+    }
+
+    if (!form.jd_text.trim()) {
+      setTailoringError(
+        "Add a job description before tailoring your resume."
+      );
+      return;
+    }
+
+    setTailoringLoading(true);
+    setTailoringError("");
+    setTailoringResult(null);
+
+    try {
+      const response = await api.post(
+        `/applications/${id}/tailor-resume/${selectedResume}`
+      );
+
+      setTailoringResult(response.data);
+    } catch (error) {
+      console.error(error);
+
+      setTailoringError(
+        error.response?.data?.detail ||
+          "Unable to tailor resume."
+      );
+    } finally {
+      setTailoringLoading(false);
+    }
+  }
+
+  async function handleGenerateInterviewPrep() {
+    if (!selectedResume) {
+      setInterviewPrepError("Please select a resume first.");
+      return;
+    }
+
+    if (!form.jd_text?.trim()) {
+      setInterviewPrepError("This application does not have a job description.");
+      return;
+    }
+
+    setInterviewPrepLoading(true);
+    setInterviewPrepError("");
+
+    try {
+      const response = await api.post(
+        `/applications/${id}/interview-prep/${selectedResume}`
+      );
+
+      setInterviewPrep(response.data);
+    } catch (error) {
+      setInterviewPrepError(
+        error.response?.data?.detail ||
+          "Failed to generate interview preparation."
+      );
+    } finally {
+      setInterviewPrepLoading(false);
+    }
+  }
+  async function handleGenerateCoverLetter() {
+    if (!selectedResume) {
+      setCoverLetterError("Please select a resume first.");
+      return;
+    }
+
+    if (!form.jd_text?.trim()) {
+      setCoverLetterError("This application does not have a job description.");
+      return;
+    }
+
+    setCoverLetterLoading(true);
+    setCoverLetterError("");
+
+    try {
+      const response = await api.post(
+        `/applications/${id}/cover-letter/${selectedResume}`
+      );
+
+      setCoverLetter(response.data);
+    } catch (error) {
+      setCoverLetterError(
+        error.response?.data?.detail || "Failed to generate cover letter."
+      );
+    } finally {
+      setCoverLetterLoading(false);
     }
   }
 
@@ -580,6 +811,22 @@ function ApplicationDetails() {
             ← Back to Applications
           </Link>
         </div>
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-300">
+            Priority
+          </label>
+
+          <select
+            name="priority"
+            value={form.priority}
+            onChange={handleChange}
+            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-blue-500"
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
       </div>
     );
   }
@@ -611,6 +858,8 @@ function ApplicationDetails() {
             {form.company}
           </p>
         </div>
+
+        <ApplicationProgress status={form.status} />
 
         <form
           onSubmit={handleSubmit}
@@ -797,6 +1046,583 @@ function ApplicationDetails() {
             </div>
           </div>
         </form>
+                {/* Job Description Analysis */}
+        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">
+                Job Description Analysis
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Analyze the requirements and key details of this job.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAnalyzeJob}
+              disabled={jobAnalysisLoading || !form.jd_text.trim()}
+              className="rounded-lg bg-purple-600 px-5 py-3 text-sm font-medium transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {jobAnalysisLoading
+                ? "Analyzing..."
+                : "Analyze Job"}
+            </button>
+          </div>
+
+          {!form.jd_text.trim() && (
+            <p className="mt-4 text-sm text-yellow-400">
+              Add a job description before analyzing it.
+            </p>
+          )}
+
+          {jobAnalysisError && (
+            <div className="mt-5 rounded-lg border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+              {jobAnalysisError}
+            </div>
+          )}
+
+          {jobAnalysis && (
+            <div className="mt-8 space-y-6">
+
+              {/* Overview */}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Experience
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-200">
+                    {jobAnalysis.required_experience_years != null
+                      ? `${jobAnalysis.required_experience_years}+ years`
+                      : "Not specified"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Seniority
+                  </p>
+                  <p className="mt-2 text-sm font-semibold capitalize text-slate-200">
+                    {jobAnalysis.seniority || "Not detected"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Education
+                  </p>
+                  <p className="mt-2 text-sm font-semibold capitalize text-slate-200">
+                    {jobAnalysis.education || "Not specified"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Work Mode
+                  </p>
+                  <p className="mt-2 text-sm font-semibold capitalize text-slate-200">
+                    {jobAnalysis.work_mode || "Not specified"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Required Skills */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  Required Skills
+                </h3>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {jobAnalysis.required_skills?.length ? (
+                    jobAnalysis.required_skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-300"
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      No required skills detected.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Preferred Skills */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  Preferred Skills
+                </h3>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {jobAnalysis.preferred_skills?.length ? (
+                    jobAnalysis.preferred_skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300"
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      No preferred skills detected.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Analysis */}
+              {jobAnalysis.ai_analysis ? (
+                <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-5">
+                  <h3 className="text-sm font-semibold text-purple-300">
+                    AI Analysis
+                  </h3>
+
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    {jobAnalysis.ai_analysis.summary}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
+                  <h3 className="text-sm font-semibold text-slate-300">
+                    AI Analysis
+                  </h3>
+
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    AI analysis is not configured yet. The structured job
+                    analysis above is available without an AI provider.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* AI Resume Tailoring */}
+        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">
+                AI Resume Tailoring
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Generate targeted suggestions to tailor your resume for this job.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTailorResume}
+              disabled={
+                tailoringLoading ||
+                !selectedResume ||
+                !form.jd_text.trim()
+              }
+              className="rounded-lg bg-purple-600 px-5 py-3 text-sm font-medium transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {tailoringLoading
+                ? "Tailoring..."
+                : "Tailor Resume"}
+            </button>
+          </div>
+
+          {!selectedResume && (
+            <p className="mt-4 text-sm text-yellow-400">
+              Select a resume in the Resume Match section first.
+            </p>
+          )}
+
+          {!form.jd_text.trim() && (
+            <p className="mt-2 text-sm text-yellow-400">
+              Add a job description before tailoring your resume.
+            </p>
+          )}
+
+          {tailoringError && (
+            <div className="mt-5 rounded-lg border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+              {tailoringError}
+            </div>
+          )}
+
+          {tailoringResult && (
+            <div className="mt-8 space-y-6">
+
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  Suggested Professional Summary
+                </h3>
+
+                <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950 p-5">
+                  <p className="text-sm leading-6 text-slate-300">
+                    {tailoringResult.professional_summary}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  Skills to Emphasize
+                </h3>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {tailoringResult.skills_to_emphasize?.map((skill) => (
+                    <span
+                      key={skill}
+                      className="rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-300"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  ATS Keywords
+                </h3>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {tailoringResult.ats_keywords?.map((keyword) => (
+                    <span
+                      key={keyword}
+                      className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300"
+                    >
+                      {keyword}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  Missing Keywords
+                </h3>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {tailoringResult.missing_keywords?.length ? (
+                    tailoringResult.missing_keywords.map((keyword) => (
+                      <span
+                        key={keyword}
+                        className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 text-xs font-medium text-yellow-300"
+                      >
+                        {keyword}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      No significant missing keywords identified.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  Experience Improvements
+                </h3>
+
+                <ul className="mt-3 space-y-2">
+                  {tailoringResult.experience_improvements?.map(
+                    (item, index) => (
+                      <li
+                        key={index}
+                        className="rounded-lg border border-slate-800 bg-slate-950 p-4 text-sm leading-6 text-slate-300"
+                      >
+                        {item}
+                      </li>
+                    )
+                  )}
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200">
+                  Suggested Changes
+                </h3>
+
+                <ul className="mt-3 space-y-2">
+                  {tailoringResult.suggested_changes?.map(
+                    (item, index) => (
+                      <li
+                        key={index}
+                        className="rounded-lg border border-slate-800 bg-slate-950 p-4 text-sm leading-6 text-slate-300"
+                      >
+                        {item}
+                      </li>
+                    )
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">AI Cover Letter</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Generate a tailored cover letter using the selected resume and job
+                description.
+              </p>
+            </div>
+
+            <button
+              onClick={handleGenerateCoverLetter}
+              disabled={coverLetterLoading || !selectedResume}
+              className="rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {coverLetterLoading ? "Generating..." : "Generate Cover Letter"}
+            </button>
+          </div>
+
+          {coverLetterError && (
+            <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+              {coverLetterError}
+            </div>
+          )}
+
+          {coverLetter && (
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-300">
+                  Subject
+                </label>
+
+                <input
+                  type="text"
+                  value={coverLetter.subject || ""}
+                  onChange={(e) =>
+                    setCoverLetter({
+                      ...coverLetter,
+                      subject: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Cover Letter
+                  </label>
+
+                  <button
+                    onClick={() =>
+                      navigator.clipboard.writeText(coverLetter.cover_letter || "")
+                    }
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-300 transition hover:bg-white/10"
+                  >
+                    Copy
+                  </button>
+                </div>
+
+                <textarea
+                  value={coverLetter.cover_letter || ""}
+                  onChange={(e) =>
+                    setCoverLetter({
+                      ...coverLetter,
+                      cover_letter: e.target.value,
+                    })
+                  }
+                  rows={18}
+                  className="w-full resize-y rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-sm leading-6 text-gray-200 outline-none focus:border-purple-500"
+                />
+              </div>
+
+              {coverLetter.key_points?.length > 0 && (
+                <div>
+                  <h3 className="mb-3 text-sm font-medium text-gray-300">
+                    Key Points
+                  </h3>
+
+                  <div className="flex flex-wrap gap-2">
+                    {coverLetter.key_points.map((point, index) => (
+                      <span
+                        key={index}
+                        className="rounded-full bg-purple-500/10 px-3 py-1.5 text-xs text-purple-300"
+                      >
+                        {point}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">AI Interview Preparation</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Generate interview questions tailored to this job and your selected
+                resume.
+              </p>
+            </div>
+
+            <button
+              onClick={handleGenerateInterviewPrep}
+              disabled={interviewPrepLoading || !selectedResume}
+              className="rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {interviewPrepLoading
+                ? "Preparing..."
+                : "Prepare for Interview"}
+            </button>
+          </div>
+
+          {interviewPrepError && (
+            <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+              {interviewPrepError}
+            </div>
+          )}
+
+          {interviewPrep && (
+            <div className="mt-6 space-y-6">
+              {/* Overview */}
+              <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-5">
+                <h3 className="font-semibold">Interview Overview</h3>
+
+                <p className="mt-3 text-sm leading-6 text-gray-300">
+                  {interviewPrep.overview}
+                </p>
+              </div>
+
+              {/* Technical Questions */}
+              <div>
+                <h3 className="mb-4 text-lg font-semibold">
+                  Technical Questions
+                </h3>
+
+                <div className="space-y-4">
+                  {interviewPrep.technical_questions?.map(
+                    (item, index) => (
+                      <div
+                        key={index}
+                        className="rounded-xl border border-white/10 bg-black/20 p-5"
+                      >
+                        <div className="flex gap-3">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-500/10 text-xs font-semibold text-purple-300">
+                            {index + 1}
+                          </span>
+
+                          <div>
+                            <p className="font-medium text-gray-200">
+                              {item.question}
+                            </p>
+
+                            <p className="mt-3 text-sm text-gray-400">
+                              <span className="font-medium text-gray-300">
+                                Why it matters:
+                              </span>{" "}
+                              {item.why_it_matters}
+                            </p>
+
+                            <p className="mt-2 text-sm text-gray-400">
+                              <span className="font-medium text-gray-300">
+                                Preparation:
+                              </span>{" "}
+                              {item.preparation_tip}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Behavioral Questions */}
+              <div>
+                <h3 className="mb-4 text-lg font-semibold">
+                  Behavioral Questions
+                </h3>
+
+                <div className="space-y-4">
+                  {interviewPrep.behavioral_questions?.map(
+                    (item, index) => (
+                      <div
+                        key={index}
+                        className="rounded-xl border border-white/10 bg-black/20 p-5"
+                      >
+                        <p className="font-medium text-gray-200">
+                          {item.question}
+                        </p>
+
+                        <p className="mt-3 text-sm text-gray-400">
+                          <span className="font-medium text-gray-300">
+                            Preparation:
+                          </span>{" "}
+                          {item.preparation_tip}
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Role Specific */}
+              <div>
+                <h3 className="mb-4 text-lg font-semibold">
+                  Role-Specific Questions
+                </h3>
+
+                <div className="space-y-4">
+                  {interviewPrep.role_specific_questions?.map(
+                    (item, index) => (
+                      <div
+                        key={index}
+                        className="rounded-xl border border-white/10 bg-black/20 p-5"
+                      >
+                        <p className="font-medium text-gray-200">
+                          {item.question}
+                        </p>
+
+                        <p className="mt-3 text-sm text-gray-400">
+                          <span className="font-medium text-gray-300">
+                            Preparation:
+                          </span>{" "}
+                          {item.preparation_tip}
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Skill Gaps */}
+              {interviewPrep.skill_gap_topics?.length > 0 && (
+                <div>
+                  <h3 className="mb-3 text-lg font-semibold">
+                    Skill Gap Topics
+                  </h3>
+
+                  <div className="flex flex-wrap gap-2">
+                    {interviewPrep.skill_gap_topics.map(
+                      (topic, index) => (
+                        <span
+                          key={index}
+                          className="rounded-full bg-orange-500/10 px-3 py-1.5 text-xs text-orange-300"
+                        >
+                          {topic}
+                        </span>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
         <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
         <div>
             <h2 className="text-xl font-semibold">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/client";
 
 const statusStyles = {
@@ -25,6 +25,7 @@ const priorityStyles = {
   low: "bg-green-950 text-green-300",
 };
 
+
 const priorityLabels = {
   high: "High Priority",
   medium: "Medium Priority",
@@ -43,6 +44,9 @@ function Applications() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [priorityRecommendations, setPriorityRecommendations] = useState({});
+  const [priorityLoading, setPriorityLoading] = useState({});
+  const [priorityErrors, setPriorityErrors] = useState({});
 
   async function loadApplications() {
     setLoading(true);
@@ -76,18 +80,51 @@ function Applications() {
       const query = search.toLowerCase();
 
       const matchesSearch =
-        application.company
-          .toLowerCase()
-          .includes(query) ||
-        application.role
-          .toLowerCase()
-          .includes(query);
+        application.company?.toLowerCase().includes(query) ||
+        application.role?.toLowerCase().includes(query) ||
+        application.jd_text?.toLowerCase().includes(query) ||
+        application.notes?.toLowerCase().includes(query);
 
-      
+          
 
       return matchesSearch;
     }
   );
+
+  async function handlePriorityRecommendation(applicationId) {
+    setPriorityLoading((prev) => ({
+      ...prev,
+      [applicationId]: true,
+    }));
+
+    setPriorityErrors((prev) => ({
+      ...prev,
+      [applicationId]: "",
+    }));
+
+    try {
+      const response = await api.post(
+        `/applications/${applicationId}/priority-recommendation`
+      );
+
+      setPriorityRecommendations((prev) => ({
+        ...prev,
+        [applicationId]: response.data,
+      }));
+    } catch (error) {
+      setPriorityErrors((prev) => ({
+        ...prev,
+        [applicationId]:
+          error.response?.data?.detail ||
+          "Failed to generate priority recommendation.",
+      }));
+    } finally {
+      setPriorityLoading((prev) => ({
+        ...prev,
+        [applicationId]: false,
+      }));
+    }
+  }
 
   async function handleDelete(id) {
     const confirmed = window.confirm(
@@ -259,6 +296,10 @@ function Applications() {
                     key={application.id}
                     application={application}
                     onDelete={handleDelete}
+                    onPriorityRecommendation={handlePriorityRecommendation}
+                    priorityRecommendation={priorityRecommendations[application.id]}
+                    priorityLoading={priorityLoading[application.id]}
+                    priorityError={priorityErrors[application.id]}
                   />
                 )
               )}
@@ -272,6 +313,10 @@ function Applications() {
 function ApplicationCard({
   application,
   onDelete,
+  onPriorityRecommendation,
+  priorityRecommendation,
+  priorityLoading,
+  priorityError,
 }) {
   const [editingPriority, setEditingPriority] = useState(false);
   const [savingPriority, setSavingPriority] = useState(false);
@@ -358,7 +403,67 @@ function ApplicationCard({
                   ]
                 }
               </button>
+              
             )}
+            <button
+              onClick={() => onPriorityRecommendation(application.id)}
+              disabled={priorityLoading}
+              className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-300 transition hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {priorityLoading ? "Analyzing..." : "AI Priority"}
+            </button>
+            {priorityError && (
+              <div className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">
+                {priorityError}
+              </div>
+            )}
+
+            {priorityRecommendation && (
+              <div className="mt-4 rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h4 className="font-medium text-gray-200">
+                    AI Priority Recommendation
+                  </h4>
+
+                  <span className="rounded-full bg-purple-500/10 px-3 py-1 text-xs font-medium capitalize text-purple-300">
+                    {priorityRecommendation.recommended_priority}
+                  </span>
+                </div>
+
+                <p className="mt-3 text-sm leading-5 text-gray-400">
+                  {priorityRecommendation.reason}
+                </p>
+
+                <div className="mt-3 text-xs text-gray-400">
+                  <span className="font-medium text-gray-300">
+                    Urgency:
+                  </span>{" "}
+                  <span className="capitalize">
+                    {priorityRecommendation.urgency}
+                  </span>
+                </div>
+
+                {priorityRecommendation.actions?.length > 0 && (
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-medium text-gray-300">
+                      Suggested Actions
+                    </p>
+
+                    <ul className="space-y-2">
+                      {priorityRecommendation.actions.map((action, index) => (
+                        <li
+                          key={index}
+                          className="text-xs leading-5 text-gray-400"
+                        >
+                          • {action}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            
           </div>
 
           <p className="mt-1 text-slate-400">

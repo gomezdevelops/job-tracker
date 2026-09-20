@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 
+
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import (
@@ -28,7 +29,18 @@ from app.schemas import (
 )
 from app.models.resume import Resume
 from app.services.job_matcher import calculate_match
+from app.services.llm_client import (
+    analyze_with_ai,
+    generate_application_insights_with_ai,
+    generate_cover_letter_with_ai,
+    generate_interview_prep_with_ai,
+    is_ai_configured,
+    recommend_application_priority_with_ai,
+    tailor_resume_with_ai,
+)
 from app.schemas import JobMatchResponse
+from app.services.job_analyzer import analyze_job_description_full
+from app.services.application_insights import build_application_insights
 
 def get_priority_suggestion(score: int | None) -> str | None:
     if score is None:
@@ -180,6 +192,268 @@ def get_applications(
     return applications
 
 @router.get(
+    "/{application_id}/analyze-jd",
+)
+def analyze_application_jd(
+    application_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found.",
+        )
+
+    if not application.jd_text:
+        raise HTTPException(
+            status_code=400,
+            detail="This application has no job description.",
+        )
+
+    return analyze_job_description_full(
+        application.jd_text
+    )
+
+@router.post(
+    "/{application_id}/tailor-resume/{resume_id}",
+)
+def tailor_application_resume(
+    application_id: uuid.UUID,
+    resume_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found.",
+        )
+
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.id == resume_id,
+            Resume.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="Resume not found.",
+        )
+
+    if not application.jd_text:
+        raise HTTPException(
+            status_code=400,
+            detail="This application has no job description.",
+        )
+
+    if not resume.extracted_text:
+        raise HTTPException(
+            status_code=400,
+            detail="This resume has no extracted text.",
+        )
+
+    if not is_ai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI resume tailoring is not configured. "
+                "Please configure an AI provider first."
+            ),
+        )
+
+    try:
+        result = tailor_resume_with_ai(
+            resume.extracted_text,
+            application.jd_text,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI resume tailoring failed: {str(exc)}",
+        )
+
+    return result
+
+@router.post("/{application_id}/cover-letter/{resume_id}")
+def generate_cover_letter(
+    application_id: UUID,
+    resume_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found",
+        )
+
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.id == resume_id,
+            Resume.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="Resume not found",
+        )
+
+    if not application.jd_text or not application.jd_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Job description is required",
+        )
+
+    if not resume.extracted_text or not resume.extracted_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Resume text is not available",
+        )
+
+    if not is_ai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="AI cover letter generation is not configured.",
+        )
+
+    try:
+        result = generate_cover_letter_with_ai(
+            resume_text=resume.extracted_text,
+            job_description=application.jd_text,
+            company=application.company,
+            role=application.role,
+        )
+
+        return result
+
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate cover letter.",
+        )
+    
+@router.post("/{application_id}/priority-recommendation")
+def recommend_application_priority(
+    application_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found",
+        )
+
+    if not is_ai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="AI priority recommendation is not configured.",
+        )
+
+    match = (
+        db.query(ResumeMatch)
+        .filter(
+            ResumeMatch.application_id == application.id,
+        )
+        .order_by(ResumeMatch.created_at.desc())
+        .first()
+    )
+
+    match_data = match.match_data if match else {}
+
+    application_data = {
+        "company": application.company,
+        "role": application.role,
+        "status": (
+            application.status.value
+            if hasattr(application.status, "value")
+            else application.status
+        ),
+        "current_priority": (
+            application.priority.value
+            if hasattr(application.priority, "value")
+            else application.priority
+        ),
+        "date_applied": (
+            application.date_applied.isoformat()
+            if application.date_applied
+            else None
+        ),
+        "deadline": (
+            application.deadline.isoformat()
+            if application.deadline
+            else None
+        ),
+        "match_score": match_data.get("score"),
+        "missing_skills": match_data.get("missing_skills", []),
+        "missing_required_skills": match_data.get(
+            "missing_required_skills",
+            [],
+        ),
+        "matched_skills": match_data.get("matched_skills", []),
+    }
+
+    try:
+        result = recommend_application_priority_with_ai(
+            application_data
+        )
+
+        return result
+
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate priority recommendation.",
+        )
+
+    
+    
+@router.get(
     "/{application_id}/match/{resume_id}",
     response_model=JobMatchResponse,
 )
@@ -235,6 +509,18 @@ def match_application(
         resume.extracted_text,
         application.jd_text,
     )
+        # Optional AI analysis
+    match_result["ai_analysis"] = None
+
+    if is_ai_configured():
+        try:
+            match_result["ai_analysis"] = analyze_with_ai(
+                resume.extracted_text,
+                application.jd_text,
+            )
+        except Exception:
+            # AI failure should never break the core matching feature.
+            match_result["ai_analysis"] = None
 
     matched_skills = match_result.get(
         "matched_skills",
@@ -362,6 +648,78 @@ def get_resume_matches(
     ).all()
 
     return matches
+
+@router.post("/{application_id}/interview-prep/{resume_id}")
+def generate_interview_prep(
+    application_id: UUID,
+    resume_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found",
+        )
+
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.id == resume_id,
+            Resume.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="Resume not found",
+        )
+
+    if not application.jd_text or not application.jd_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Job description is required",
+        )
+
+    if not resume.extracted_text or not resume.extracted_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Resume text is not available",
+        )
+
+    if not is_ai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="AI interview preparation is not configured.",
+        )
+
+    try:
+        result = generate_interview_prep_with_ai(
+            resume_text=resume.extracted_text,
+            job_description=application.jd_text,
+            company=application.company,
+            role=application.role,
+        )
+
+        return result
+
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate interview preparation.",
+        )
+    
 @router.get(
     "/{application_id}/matches/check/{resume_id}",
 )
@@ -451,6 +809,55 @@ def get_match_history(
     )
 
     return matches
+
+@router.get("/analytics/insights")
+def get_application_insights(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    applications = (
+        db.query(Application)
+        .filter(Application.user_id == current_user.id)
+        .all()
+    )
+
+    application_ids = [application.id for application in applications]
+
+    matches = []
+
+    if application_ids:
+        matches = (
+            db.query(ResumeMatch)
+            .join(
+                Application,
+                ResumeMatch.application_id == Application.id,
+            )
+            .filter(
+                Application.user_id == current_user.id,
+                ResumeMatch.application_id.in_(application_ids),
+            )
+            .all()
+        )
+
+    insights = build_application_insights(
+        applications=applications,
+        matches=matches,
+    )
+
+    ai_insights = None
+
+    if is_ai_configured():
+        try:
+            ai_insights = generate_application_insights_with_ai(
+                insights
+            )
+        except Exception:
+            ai_insights = None
+
+    return {
+        **insights,
+        "ai_insights": ai_insights,
+    }
 
 @router.get("/{application_id}/timeline")
 def get_application_timeline(
