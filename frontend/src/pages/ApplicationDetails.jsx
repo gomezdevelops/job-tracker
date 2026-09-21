@@ -159,6 +159,14 @@ function ApplicationDetails() {
   const [editingType, setEditingType] = useState("note");
   const [editingNote, setEditingNote] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [followUps, setFollowUps] = useState([]);
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpNote, setFollowUpNote] = useState("");
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [followUpError, setFollowUpError] = useState("");
+  const [defaultMatch, setDefaultMatch] = useState(null);
+  const [defaultMatchLoading, setDefaultMatchLoading] = useState(false);
+  const [defaultMatchError, setDefaultMatchError] = useState("");
 
   useEffect(() => {
     async function loadResumes() {
@@ -434,6 +442,119 @@ function ApplicationDetails() {
       );
     } finally {
       setJobAnalysisLoading(false);
+    }
+  }
+
+    async function loadFollowUps() {
+      if (!id) return;
+
+      try {
+        const response = await api.get(`/applications/${id}/follow-ups`);
+
+        setFollowUps(response.data);
+        setFollowUpError("");
+      } catch (error) {
+        console.error("Failed to load follow-ups:", error);
+
+        setFollowUpError(
+          error.response?.data?.detail ||
+            error.message ||
+            "Failed to load follow-ups."
+        );
+      }
+    }
+
+    useEffect(() => {
+      if (id) {
+        loadFollowUps();
+      }
+    }, [id]);
+    
+
+  async function handleCreateFollowUp() {
+    if (!followUpDate) {
+      setFollowUpError("Please select a follow-up date and time.");
+      return;
+    }
+
+    setFollowUpLoading(true);
+    setFollowUpError("");
+
+    try {
+      await api.post(`/applications/${id}/follow-ups`, {
+        scheduled_at: followUpDate,
+        note: followUpNote.trim() || null,
+      });
+
+      setFollowUpDate("");
+      setFollowUpNote("");
+
+      await loadFollowUps();
+    } catch (error) {
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to schedule follow-up."
+      );
+    } finally {
+      setFollowUpLoading(false);
+    }
+  }
+
+  async function handleCompleteFollowUp(followUpId) {
+    try {
+      await api.patch(
+        `/applications/${id}/follow-ups/${followUpId}`,
+        {
+          status: "completed",
+        }
+      );
+
+      await loadFollowUps();
+    } catch (error) {
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to complete follow-up."
+      );
+    }
+  }
+
+  async function handleDeleteFollowUp(followUpId) {
+    try {
+      await api.delete(
+        `/applications/${id}/follow-ups/${followUpId}`
+      );
+
+      await loadFollowUps();
+    } catch (error) {
+      setFollowUpError(
+        error.response?.data?.detail ||
+          "Failed to delete follow-up."
+      );
+    }
+  }
+
+  async function handleMatchDefaultResume() {
+    try {
+      setDefaultMatchLoading(true);
+      setDefaultMatchError("");
+
+      const response = await api.get(
+        `/applications/${id}/match-default-resume`
+      );
+
+      setDefaultMatch(response.data);
+    } catch (error) {
+      console.error(
+        "Failed to match default resume:",
+        error
+      );
+
+      setDefaultMatchError(
+        error.response?.data?.detail ||
+          "Unable to match the default resume."
+      );
+    } finally {
+      setDefaultMatchLoading(false);
     }
   }
 
@@ -1633,6 +1754,89 @@ function ApplicationDetails() {
             Compare a resume against this job description.
             </p>
         </div>
+
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={handleMatchDefaultResume}
+            disabled={defaultMatchLoading}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {defaultMatchLoading
+              ? "Matching..."
+              : "Match Default Resume"}
+          </button>
+        </div>
+
+        {defaultMatchError && (
+          <p className="mt-3 text-sm text-red-400">
+            {defaultMatchError}
+          </p>
+        )}
+
+        {defaultMatch && (
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium text-white">
+                  {defaultMatch.resume_filename}
+                </p>
+
+                <p className="text-sm text-gray-400">
+                  Default resume match
+                </p>
+              </div>
+
+              <div className="text-2xl font-bold text-green-400">
+                {defaultMatch.match.score}%
+              </div>
+            </div>
+
+            {defaultMatch.match.matched_skills?.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-white">
+                  Matched Skills
+                </p>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {defaultMatch.match.matched_skills.map(
+                    (skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full bg-green-500/10 px-3 py-1 text-xs text-green-400"
+                      >
+                        {skill}
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            {defaultMatch.match.missing_skills?.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-white">
+                  Missing Skills
+                </p>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {defaultMatch.match.missing_skills.map(
+                    (skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full bg-red-500/10 px-3 py-1 text-xs text-red-400"
+                      >
+                        {skill}
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <select
@@ -3010,6 +3214,121 @@ function ApplicationDetails() {
               </button>
             </div>
           </form>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div>
+            <h2 className="text-xl font-semibold">Follow-ups</h2>
+            <p className="mt-1 text-sm text-gray-400">
+              Schedule reminders to follow up on this application.
+            </p>
+          </div>
+
+          {followUpError && (
+            <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+              {followUpError}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+            <input
+              type="datetime-local"
+              value={followUpDate}
+              onChange={(e) => setFollowUpDate(e.target.value)}
+              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-purple-500"
+            />
+
+            <input
+              type="text"
+              value={followUpNote}
+              onChange={(e) => setFollowUpNote(e.target.value)}
+              placeholder="Follow-up note..."
+              className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-sm text-white placeholder-gray-500 outline-none focus:border-purple-500"
+            />
+
+            <button
+              onClick={handleCreateFollowUp}
+              disabled={followUpLoading}
+              className="rounded-lg bg-purple-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {followUpLoading ? "Scheduling..." : "Schedule"}
+            </button>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {followUps.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/10 p-6 text-center">
+                <p className="text-sm text-gray-500">
+                  No follow-ups scheduled.
+                </p>
+              </div>
+            ) : (
+              followUps.map((followUp) => {
+                const completed = followUp.status === "completed";
+
+                return (
+                  <div
+                    key={followUp.id}
+                    className={`rounded-xl border p-4 ${
+                      completed
+                        ? "border-white/10 bg-black/10 opacity-70"
+                        : "border-purple-500/20 bg-purple-500/5"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-gray-200">
+                            {new Date(
+                              followUp.scheduled_at
+                            ).toLocaleString()}
+                          </span>
+
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs capitalize ${
+                              completed
+                                ? "bg-green-500/10 text-green-400"
+                                : "bg-yellow-500/10 text-yellow-400"
+                            }`}
+                          >
+                            {followUp.status}
+                          </span>
+                        </div>
+
+                        {followUp.note && (
+                          <p className="mt-2 text-sm text-gray-400">
+                            {followUp.note}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        {!completed && (
+                          <button
+                            onClick={() =>
+                              handleCompleteFollowUp(followUp.id)
+                            }
+                            className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs text-green-400 transition hover:bg-green-500/20"
+                          >
+                            Mark Done
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() =>
+                            handleDeleteFollowUp(followUp.id)
+                          }
+                          className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400 transition hover:bg-red-500/20"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </section>
 
         {/* Application Timeline */}

@@ -23,6 +23,10 @@ function Dashboard() {
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState("");
+  const [followUps, setFollowUps] = useState([]);
+  const [followUpsLoading, setFollowUpsLoading] = useState(false);
+  const [followUpReminders, setFollowUpReminders] = useState([]);
+  const [remindersLoading, setRemindersLoading] = useState(false);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -59,6 +63,72 @@ function Dashboard() {
 
     loadDashboard();
   }, []);
+  async function loadFollowUps() {
+    setFollowUpsLoading(true);
+
+    try {
+      const response = await api.get("/applications/follow-ups");
+      setFollowUps(response.data);
+    } catch (error) {
+      console.error("Failed to load dashboard follow-ups:", error);
+    } finally {
+      setFollowUpsLoading(false);
+    }
+  }
+  useEffect(() => {
+    loadFollowUps();
+  }, []);
+
+  async function loadFollowUpReminders() {
+    try {
+      setRemindersLoading(true);
+
+      const response = await api.get(
+        "/applications/follow-ups/reminders"
+      );
+
+      setFollowUpReminders(response.data);
+    } catch (error) {
+      console.error(
+        "Failed to load follow-up reminders:",
+        error
+      );
+    } finally {
+      setRemindersLoading(false);
+    }
+  }
+  useEffect(() => {
+    loadFollowUpReminders();
+  }, []);
+
+  async function handleCompleteFollowUp(followUp) {
+    try {
+      await api.patch(
+        `/applications/${followUp.application_id}/follow-ups/${followUp.id}`,
+        {
+          status: "completed",
+        }
+      );
+
+      await loadFollowUps();
+      await loadFollowUpReminders();
+    } catch (error) {
+      console.error("Failed to complete follow-up:", error);
+    }
+  }
+
+  async function handleDeleteFollowUp(followUp) {
+    try {
+      await api.delete(
+        `/applications/${followUp.application_id}/follow-ups/${followUp.id}`
+      );
+
+      await loadFollowUps();
+    } catch (error) {
+      console.error("Failed to delete follow-up:", error);
+    }
+  }
+
 
   async function handleStatusChange(applicationId, newStatus) {
     try {
@@ -108,6 +178,33 @@ function Dashboard() {
       alert("Unable to update application status.");
     }
   }
+
+  const now = new Date();
+
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+
+  const pendingFollowUps = followUps.filter(
+    (followUp) => followUp.status === "pending"
+  );
+
+  const todayFollowUps = pendingFollowUps.filter((followUp) => {
+    const date = new Date(followUp.scheduled_at);
+    return date >= startOfToday && date <= endOfToday;
+  });
+
+  const upcomingFollowUps = pendingFollowUps.filter((followUp) => {
+    const date = new Date(followUp.scheduled_at);
+    return date > endOfToday;
+  });
+
+  const overdueFollowUps = pendingFollowUps.filter((followUp) => {
+    const date = new Date(followUp.scheduled_at);
+    return date < startOfToday;
+  });
 
   const requiredSkillGaps =
     matchAnalytics?.skill_gaps?.required || [];
@@ -225,7 +322,205 @@ function Dashboard() {
           />
         </section>
 
+        <section className="mt-8">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-white">
+                Follow-up Reminders
+              </h2>
+              <p className="text-sm text-gray-400">
+                Follow-ups that need your attention today.
+              </p>
+            </div>
 
+            {followUpReminders.length > 0 && (
+              <span className="rounded-full bg-red-500/10 px-3 py-1 text-sm font-medium text-red-400">
+                {followUpReminders.length}{" "}
+                {followUpReminders.length === 1
+                  ? "reminder"
+                  : "reminders"}
+              </span>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            {remindersLoading ? (
+              <p className="text-sm text-gray-400">
+                Loading reminders...
+              </p>
+            ) : followUpReminders.length === 0 ? (
+              <div className="py-4 text-center">
+                <p className="text-sm text-gray-500">
+                  No follow-up reminders right now.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {followUpReminders.map((reminder) => (
+                  <div
+                    key={reminder.id}
+                    className="flex flex-col gap-4 rounded-xl border border-white/10 bg-black/10 p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-white">
+                          {reminder.company}
+                        </p>
+
+                        {reminder.overdue ? (
+                          <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-400">
+                            Overdue
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400">
+                            Today
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-sm text-gray-400">
+                        {reminder.role}
+                      </p>
+
+                      {reminder.note && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          {reminder.note}
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-sm text-gray-400">
+                        {new Date(
+                          reminder.scheduled_at
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        to={`/applications/${reminder.application_id}`}
+                        className="rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-white/10 hover:text-white"
+                      >
+                        View Application
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCompleteFollowUp(reminder)
+                        }
+                        className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm font-medium text-green-400 transition hover:bg-green-500/20"
+                      >
+                        Mark Done
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold text-white">
+              Follow-ups
+            </h2>
+            <p className="text-sm text-gray-400">
+              Stay on top of your application follow-ups.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-5">
+              <p className="text-sm text-gray-400">Today</p>
+              <p className="mt-2 text-3xl font-bold text-yellow-400">
+                {todayFollowUps.length}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-5">
+              <p className="text-sm text-gray-400">Upcoming</p>
+              <p className="mt-2 text-3xl font-bold text-purple-400">
+                {upcomingFollowUps.length}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
+              <p className="text-sm text-gray-400">Overdue</p>
+              <p className="mt-2 text-3xl font-bold text-red-400">
+                {overdueFollowUps.length}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+            {followUpsLoading ? (
+              <p className="text-sm text-gray-400">
+                Loading follow-ups...
+              </p>
+            ) : pendingFollowUps.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No pending follow-ups.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {pendingFollowUps.slice(0, 5).map((followUp) => (
+                  <div
+                    key={followUp.id}
+                    className="flex flex-col gap-4 rounded-xl border border-white/10 bg-black/10 p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-white">
+                        {followUp.company}
+                      </p>
+
+                      <p className="text-sm text-gray-400">
+                        {followUp.role}
+                      </p>
+
+                      {followUp.note && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          {followUp.note}
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-sm text-gray-400">
+                        {new Date(
+                          followUp.scheduled_at
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        to={`/applications/${followUp.application_id}`}
+                        className="rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-white/10 hover:text-white"
+                      >
+                        View Application
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteFollowUp(followUp)}
+                        className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm font-medium text-green-400 transition hover:bg-green-500/20"
+                      >
+                        Mark Done
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFollowUp(followUp)}
+                        className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/20"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* Urgent Applications */}
         <section className="mt-8">
@@ -416,7 +711,6 @@ function Dashboard() {
             </div>
           </div>
         </section>
-
         {/* Priority Overview */}
         <section className="mt-8">
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">

@@ -12,20 +12,24 @@ function Layout({ children }) {
 
   const navItems = [
     {
-        label: "Dashboard",
-        path: "/dashboard",
+      label: "Dashboard",
+      path: "/dashboard",
     },
     {
-        label: "Applications",
-        path: "/applications",
+      label: "Applications",
+      path: "/applications",
     },
     {
-        label: "Analytics",
-        path: "/analytics",
+      label: "Application Board",
+      path: "/applications/board",
     },
     {
-        label: "Resumes",
-        path: "/resumes",
+      label: "Analytics",
+      path: "/analytics",
+    },
+    {
+      label: "Resumes",
+      path: "/resumes",
     },
   ];
 

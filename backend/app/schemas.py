@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from datetime import date
 from enum import Enum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -78,6 +79,7 @@ class ResumeResponse(BaseModel):
     filename: str
     extracted_text: str | None
     created_at: datetime
+    file_size: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -152,3 +154,40 @@ class ApplicationEventResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class FollowUpCreate(BaseModel):
+    scheduled_at: datetime
+    note: str | None = None
+
+
+class FollowUpUpdate(BaseModel):
+    scheduled_at: datetime | None = None
+    note: str | None = None
+    status: str | None = None
+
+
+class FollowUpResponse(BaseModel):
+    id: UUID
+    application_id: UUID
+    scheduled_at: datetime
+    note: str | None = None
+    status: str
+    completed_at: datetime | None = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DashboardFollowUpResponse(BaseModel):
+    id: UUID
+    application_id: UUID
+    company: str
+    role: str
+    scheduled_at: datetime
+    note: str | None = None
+    status: str
+    completed_at: datetime | None = None
+
+    class Config:
+        from_attributes = True       

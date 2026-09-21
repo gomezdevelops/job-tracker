@@ -99,3 +99,10 @@ class Application(Base):
         cascade="all, delete-orphan",
         order_by="ResumeMatch.created_at.desc()",
     )
+
+    follow_ups = relationship(
+    "FollowUp",
+    back_populates="application",
+    cascade="all, delete-orphan",
+    order_by="FollowUp.scheduled_at",
+)

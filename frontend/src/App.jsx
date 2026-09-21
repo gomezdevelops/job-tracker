@@ -10,6 +10,7 @@ import ApplicationDetails from "./pages/ApplicationDetails";
 import Layout from "./components/Layout";
 import Analytics from "./pages/Analytics";
 import Resumes from "./pages/Resumes";
+import ApplicationBoard from "./pages/ApplicationBoard";
 function App() {
   return (
     <Routes>
@@ -87,6 +88,10 @@ function App() {
             </Layout>
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/applications/board"
+        element={<ApplicationBoard />}
       />
 
       <Route

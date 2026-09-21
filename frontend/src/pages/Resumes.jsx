@@ -78,6 +78,91 @@ function Resumes() {
     }
   }
 
+  async function handleSetDefault(resumeId) {
+    try {
+      setError("");
+      setSuccess("");
+
+      await api.patch(`/resumes/${resumeId}/default`);
+
+      setSuccess("Default resume updated successfully.");
+
+      await loadResumes();
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error.response?.data?.detail ||
+          "Unable to set default resume."
+      );
+    }
+  }
+
+  async function handleViewResume(resumeId) {
+    try {
+      setError("");
+
+      const response = await api.get(
+        `/resumes/${resumeId}/file`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const blobUrl = window.URL.createObjectURL(
+        response.data
+      );
+
+      window.open(blobUrl, "_blank");
+
+      setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+      }, 60000);
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error.response?.data?.detail ||
+          "Unable to open resume."
+      );
+    }
+  }
+
+  async function handleDownloadResume(resume) {
+    try {
+      setError("");
+
+      const response = await api.get(
+        `/resumes/${resume.id}/file`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const blobUrl = window.URL.createObjectURL(
+        response.data
+      );
+
+      const link = document.createElement("a");
+
+      link.href = blobUrl;
+      link.download = resume.filename;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error.response?.data?.detail ||
+          "Unable to download resume."
+      );
+    }
+  }
+
   async function handleDelete(id) {
     const confirmed = window.confirm(
       "Are you sure you want to delete this resume?"
@@ -116,6 +201,21 @@ function Resumes() {
         day: "numeric",
       }
     );
+  }
+  function formatFileSize(bytes) {
+    if (!bytes) {
+      return "Unknown size";
+    }
+
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   return (
@@ -197,29 +297,89 @@ function Resumes() {
                 className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <h2 className="truncate font-semibold">
-                    {resume.filename}
-                  </h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="truncate font-semibold">
+                      {resume.filename}
+                    </h2>
+
+                    {resume.is_default && (
+                      <span className="rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-400">
+                        Default
+                      </span>
+                    )}
+                  </div>
 
                   <p className="mt-1 text-sm text-slate-500">
                     Uploaded{" "}
-                    {formatDate(resume.created_at)}
+                    {formatDate(
+                      resume.uploaded_at ||
+                        resume.created_at
+                    )}
+                    {" · "}
+                    {formatFileSize(resume.file_size)}
                   </p>
 
-                  <p className="mt-2 text-xs text-green-400">
-                    Resume text extracted
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                    <span className="text-green-400">
+                      Resume text extracted
+                    </span>
+
+                    <span className="text-slate-500">
+                      {resume.match_count ?? 0}{" "}
+                      {(resume.match_count ?? 0) === 1
+                        ? "application matched"
+                        : "applications matched"}
+                    </span>
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleDelete(resume.id)
-                  }
-                  className="rounded-lg border border-red-900 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950"
-                >
-                  Delete
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleViewResume(resume.id)
+                    }
+                    className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                  >
+                    View PDF
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleDownloadResume(resume)
+                    }
+                    className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                  >
+                    Download
+                  </button>
+
+                  {resume.is_default ? (
+                    <span className="rounded-lg bg-green-500/10 px-4 py-2 text-sm font-medium text-green-400">
+                      Default Resume
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleSetDefault(resume.id)
+                      }
+                      className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                    >
+                      Set as Default
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleDelete(resume.id)
+                    }
+                    className="rounded-lg border border-red-900 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>

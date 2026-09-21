@@ -3,9 +3,11 @@ import uuid
 from typing import Literal
 from uuid import UUID
 
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, select
 from sqlalchemy.orm import Session
+
 
 
 from app.auth import get_current_user
@@ -21,6 +23,7 @@ from app.schemas import (
     ApplicationResponse,
     ApplicationStatus,
     ApplicationUpdate,
+    DashboardFollowUpResponse,
     JobMatchResponse,
     ApplicationEventCreate,
     ApplicationEventResponse,
@@ -41,6 +44,9 @@ from app.services.llm_client import (
 from app.schemas import JobMatchResponse
 from app.services.job_analyzer import analyze_job_description_full
 from app.services.application_insights import build_application_insights
+from datetime import datetime, timedelta
+from app.models.follow_up import FollowUp
+from app.schemas import FollowUpCreate, FollowUpUpdate, FollowUpResponse
 
 def get_priority_suggestion(score: int | None) -> str | None:
     if score is None:
@@ -367,7 +373,263 @@ def generate_cover_letter(
             status_code=502,
             detail="Failed to generate cover letter.",
         )
-    
+
+@router.post(
+    "/{application_id}/follow-ups",
+    response_model=FollowUpResponse,
+)
+def create_follow_up(
+    application_id: UUID,
+    follow_up: FollowUpCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found",
+        )
+
+    new_follow_up = FollowUp(
+        application_id=application.id,
+        scheduled_at=follow_up.scheduled_at,
+        note=follow_up.note,
+        status="pending",
+    )
+
+    db.add(new_follow_up)
+    db.commit()
+    db.refresh(new_follow_up)
+
+    return new_follow_up
+
+@router.get(
+    "/{application_id}/follow-ups",
+    response_model=list[FollowUpResponse],
+)
+def get_follow_ups(
+    application_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found",
+        )
+
+    return (
+        db.query(FollowUp)
+        .filter(FollowUp.application_id == application.id)
+        .order_by(FollowUp.scheduled_at.asc())
+        .all()
+    )
+
+@router.patch(
+    "/{application_id}/follow-ups/{follow_up_id}",
+    response_model=FollowUpResponse,
+)
+def update_follow_up(
+    application_id: UUID,
+    follow_up_id: UUID,
+    follow_up_data: FollowUpUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found",
+        )
+
+    follow_up = (
+        db.query(FollowUp)
+        .filter(
+            FollowUp.id == follow_up_id,
+            FollowUp.application_id == application.id,
+        )
+        .first()
+    )
+
+    if not follow_up:
+        raise HTTPException(
+            status_code=404,
+            detail="Follow-up not found",
+        )
+
+    if follow_up_data.scheduled_at is not None:
+        follow_up.scheduled_at = follow_up_data.scheduled_at
+
+    if follow_up_data.note is not None:
+        follow_up.note = follow_up_data.note
+
+    if follow_up_data.status is not None:
+        if follow_up_data.status not in {"pending", "completed"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid follow-up status",
+            )
+
+        follow_up.status = follow_up_data.status
+
+        if follow_up_data.status == "completed":
+            follow_up.completed_at = datetime.utcnow()
+        else:
+            follow_up.completed_at = None
+
+    db.commit()
+    db.refresh(follow_up)
+
+    return follow_up
+
+@router.delete("/{application_id}/follow-ups/{follow_up_id}")
+def delete_follow_up(
+    application_id: UUID,
+    follow_up_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found",
+        )
+
+    follow_up = (
+        db.query(FollowUp)
+        .filter(
+            FollowUp.id == follow_up_id,
+            FollowUp.application_id == application.id,
+        )
+        .first()
+    )
+
+    if not follow_up:
+        raise HTTPException(
+            status_code=404,
+            detail="Follow-up not found",
+        )
+
+    db.delete(follow_up)
+    db.commit()
+
+    return {"message": "Follow-up deleted successfully"}
+
+
+@router.get(
+    "/follow-ups",
+    response_model=list[DashboardFollowUpResponse],
+)
+def get_all_follow_ups(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    follow_ups = (
+        db.query(FollowUp, Application)
+        .join(
+            Application,
+            FollowUp.application_id == Application.id,
+        )
+        .filter(
+            Application.user_id == current_user.id,
+        )
+        .order_by(FollowUp.scheduled_at.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": follow_up.id,
+            "application_id": application.id,
+            "company": application.company,
+            "role": application.role,
+            "scheduled_at": follow_up.scheduled_at,
+            "note": follow_up.note,
+            "status": follow_up.status,
+            "completed_at": follow_up.completed_at,
+        }
+        for follow_up, application in follow_ups
+    ]
+
+@router.get("/follow-ups/reminders")
+def get_follow_up_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    now = datetime.utcnow()
+    start_of_today = datetime(
+        now.year,
+        now.month,
+        now.day,
+    )
+    end_of_today = start_of_today + timedelta(days=1)
+
+    follow_ups = (
+        db.query(FollowUp, Application)
+        .join(Application, FollowUp.application_id == Application.id)
+        .filter(
+            Application.user_id == current_user.id,
+            FollowUp.status == "pending",
+            FollowUp.scheduled_at < end_of_today,
+        )
+        .order_by(FollowUp.scheduled_at.asc())
+        .all()
+    )
+
+    reminders = []
+
+    for follow_up, application in follow_ups:
+        reminders.append(
+            {
+                "id": follow_up.id,
+                "application_id": application.id,
+                "company": application.company,
+                "role": application.role,
+                "scheduled_at": follow_up.scheduled_at,
+                "note": follow_up.note,
+                "overdue": follow_up.scheduled_at < start_of_today,
+            }
+        )
+
+    return reminders
+
+
 @router.post("/{application_id}/priority-recommendation")
 def recommend_application_priority(
     application_id: UUID,
@@ -578,6 +840,53 @@ def match_application(
     db.commit()
 
     return match_result
+
+@router.get("/{application_id}/match-default-resume")
+def match_default_resume(
+    application_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found",
+        )
+
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.user_id == current_user.id,
+            Resume.is_default == True,
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="No default resume selected.",
+        )
+
+    result = calculate_match(
+        resume.extracted_text or "",
+        application.jd_text or "",
+    )
+
+    return {
+        "resume_id": resume.id,
+        "resume_filename": resume.filename,
+        "match": result,
+    }
 
 @router.get(
     "/{application_id}/matches/{match_id}",
