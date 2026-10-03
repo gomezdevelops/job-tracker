@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -278,4 +278,95 @@ def get_match_analytics(
             latest_matches
         ),
         "score_distribution": score_distribution,
+    }
+
+@router.get("/trends")
+def get_application_trends(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    applications = (
+        db.query(Application)
+        .filter(Application.user_id == current_user.id)
+        .order_by(Application.created_at.asc())
+        .all()
+    )
+
+    total = len(applications)
+
+    status_counts = {
+        "saved": 0,
+        "applied": 0,
+        "screening": 0,
+        "interview": 0,
+        "offer": 0,
+        "rejected": 0,
+    }
+
+    monthly_counts = {}
+
+    for application in applications:
+        current_status = (
+            application.status.value
+            if hasattr(application.status, "value")
+            else application.status
+        )
+
+        if current_status in status_counts:
+            status_counts[current_status] += 1
+
+        if application.created_at:
+            month_key = application.created_at.strftime("%Y-%m")
+
+            monthly_counts[month_key] = (
+                monthly_counts.get(month_key, 0) + 1
+            )
+
+    applied_count = status_counts["applied"]
+    screening_count = status_counts["screening"]
+    interview_count = status_counts["interview"]
+    offer_count = status_counts["offer"]
+    rejected_count = status_counts["rejected"]
+
+    active_count = (
+        applied_count
+        + screening_count
+        + interview_count
+        + offer_count
+    )
+
+    interview_rate = (
+        round((interview_count / total) * 100, 1)
+        if total
+        else 0
+    )
+
+    offer_rate = (
+        round((offer_count / total) * 100, 1)
+        if total
+        else 0
+    )
+
+    rejection_rate = (
+        round((rejected_count / total) * 100, 1)
+        if total
+        else 0
+    )
+
+    return {
+        "total_applications": total,
+        "active_applications": active_count,
+        "status_counts": status_counts,
+        "monthly_counts": [
+            {
+                "month": month,
+                "count": count,
+            }
+            for month, count in sorted(monthly_counts.items())
+        ],
+        "rates": {
+            "interview_rate": interview_rate,
+            "offer_rate": offer_rate,
+            "rejection_rate": rejection_rate,
+        },
     }

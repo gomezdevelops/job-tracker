@@ -559,37 +559,25 @@ function ApplicationDetails() {
   }
 
   async function handleTailorResume() {
-    if (!selectedResume) {
-      setTailoringError("Please select a resume first.");
-      return;
-    }
-
-    if (!form.jd_text.trim()) {
-      setTailoringError(
-        "Add a job description before tailoring your resume."
-      );
-      return;
-    }
-
-    setTailoringLoading(true);
-    setTailoringError("");
-    setTailoringResult(null);
+    setTailorLoading(true);
+    setTailorError("");
+    setTailoredResume(null);
 
     try {
       const response = await api.post(
-        `/applications/${id}/tailor-resume/${selectedResume}`
+        `/applications/${applicationId}/tailor-default-resume`
       );
 
-      setTailoringResult(response.data);
+      setTailoredResume(response.data);
     } catch (error) {
       console.error(error);
 
-      setTailoringError(
+      setTailorError(
         error.response?.data?.detail ||
-          "Unable to tailor resume."
+          "Failed to tailor the resume."
       );
     } finally {
-      setTailoringLoading(false);
+      setTailorLoading(false);
     }
   }
 
@@ -623,33 +611,28 @@ function ApplicationDetails() {
     }
   }
   async function handleGenerateCoverLetter() {
-    if (!selectedResume) {
-      setCoverLetterError("Please select a resume first.");
-      return;
-    }
-
-    if (!form.jd_text?.trim()) {
-      setCoverLetterError("This application does not have a job description.");
-      return;
-    }
-
     setCoverLetterLoading(true);
     setCoverLetterError("");
+    setCoverLetter(null);
 
     try {
       const response = await api.post(
-        `/applications/${id}/cover-letter/${selectedResume}`
+        `/applications/${applicationId}/cover-letter-default-resume`
       );
 
       setCoverLetter(response.data);
     } catch (error) {
+      console.error(error);
+
       setCoverLetterError(
-        error.response?.data?.detail || "Failed to generate cover letter."
+        error.response?.data?.detail ||
+          "Failed to generate cover letter."
       );
     } finally {
       setCoverLetterLoading(false);
     }
   }
+ 
 
   async function handleMatch() {
     if (!selectedResume) {
@@ -1322,6 +1305,16 @@ function ApplicationDetails() {
             </div>
           )}
         </section>
+        <div className="mb-4 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+          <p className="text-sm font-medium text-blue-300">
+            Using your default resume
+          </p>
+
+          <p className="mt-1 text-xs text-slate-400">
+            AI tailoring and cover letter generation will automatically use
+            the resume you marked as default.
+          </p>
+        </div>
 
         {/* AI Resume Tailoring */}
         <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
@@ -1335,6 +1328,7 @@ function ApplicationDetails() {
                 Generate targeted suggestions to tailor your resume for this job.
               </p>
             </div>
+            
 
             <button
               type="button"

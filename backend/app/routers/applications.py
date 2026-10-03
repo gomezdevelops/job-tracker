@@ -2,6 +2,7 @@ import hashlib
 import uuid
 from typing import Literal
 from uuid import UUID
+from pydantic import BaseModel
 
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -65,6 +66,19 @@ def calculate_jd_hash(jd_text: str) -> str:
     return hashlib.sha256(
         normalized.encode("utf-8")
     ).hexdigest()
+
+class BulkApplicationIds(BaseModel):
+    application_ids: list[UUID]
+
+
+class BulkApplicationStatus(BaseModel):
+    application_ids: list[UUID]
+    status: str
+
+
+class BulkApplicationPriority(BaseModel):
+    application_ids: list[UUID]
+    priority: str
 
 router = APIRouter(
     prefix="/applications",
@@ -196,6 +210,111 @@ def get_applications(
     applications = db.scalars(query).all()
 
     return applications
+@router.patch("/bulk/status")
+def bulk_update_status(
+    payload: BulkApplicationStatus,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    allowed_statuses = {
+        "saved",
+        "applied",
+        "screening",
+        "interview",
+        "offer",
+        "rejected",
+    }
+
+    if payload.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid application status.",
+        )
+
+    applications = (
+        db.query(Application)
+        .filter(
+            Application.id.in_(payload.application_ids),
+            Application.user_id == current_user.id,
+        )
+        .all()
+    )
+
+    for application in applications:
+        application.status = payload.status
+
+    db.commit()
+
+    return {
+        "updated": len(applications),
+        "status": payload.status,
+    }
+
+
+@router.patch("/bulk/priority")
+def bulk_update_priority(
+    payload: BulkApplicationPriority,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    allowed_priorities = {
+        "low",
+        "medium",
+        "high",
+    }
+
+    if payload.priority not in allowed_priorities:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid application priority.",
+        )
+
+    applications = (
+        db.query(Application)
+        .filter(
+            Application.id.in_(payload.application_ids),
+            Application.user_id == current_user.id,
+        )
+        .all()
+    )
+
+    for application in applications:
+        application.priority = payload.priority
+
+    db.commit()
+
+    return {
+        "updated": len(applications),
+        "priority": payload.priority,
+    }
+
+
+@router.delete("/bulk")
+def bulk_delete_applications(
+    payload: BulkApplicationIds,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    applications = (
+        db.query(Application)
+        .filter(
+            Application.id.in_(payload.application_ids),
+            Application.user_id == current_user.id,
+        )
+        .all()
+    )
+
+    deleted_count = len(applications)
+
+    for application in applications:
+        db.delete(application)
+
+    db.commit()
+
+    return {
+        "deleted": deleted_count,
+    }
+
 
 @router.get(
     "/{application_id}/analyze-jd",
@@ -230,6 +349,80 @@ def analyze_application_jd(
         application.jd_text
     )
 
+@router.post(
+    "/{application_id}/tailor-default-resume",
+)
+def tailor_application_default_resume(
+    application_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found.",
+        )
+
+    if not application.jd_text or not application.jd_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="This application has no job description.",
+        )
+
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.user_id == current_user.id,
+            Resume.is_default == True,
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="No default resume selected.",
+        )
+
+    if not resume.extracted_text or not resume.extracted_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="The default resume has no extracted text.",
+        )
+
+    if not is_ai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="AI resume tailoring is not configured.",
+        )
+
+    try:
+        result = tailor_resume_with_ai(
+            resume.extracted_text,
+            application.jd_text,
+        )
+
+        return {
+            "resume_id": resume.id,
+            "resume_filename": resume.filename,
+            "result": result,
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to tailor the resume.",
+        )
+    
 @router.post(
     "/{application_id}/tailor-resume/{resume_id}",
 )
@@ -302,7 +495,81 @@ def tailor_application_resume(
         )
 
     return result
+@router.post(
+    "/{application_id}/cover-letter-default-resume",
+)
+def generate_cover_letter_default_resume(
+    application_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
 
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found.",
+        )
+
+    if not application.jd_text or not application.jd_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Job description is required.",
+        )
+
+    resume = (
+        db.query(Resume)
+        .filter(
+            Resume.user_id == current_user.id,
+            Resume.is_default == True,
+        )
+        .first()
+    )
+
+    if not resume:
+        raise HTTPException(
+            status_code=404,
+            detail="No default resume selected.",
+        )
+
+    if not resume.extracted_text or not resume.extracted_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="The default resume has no extracted text.",
+        )
+
+    if not is_ai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="AI cover letter generation is not configured.",
+        )
+
+    try:
+        result = generate_cover_letter_with_ai(
+            resume_text=resume.extracted_text,
+            job_description=application.jd_text,
+            company=application.company,
+            role=application.role,
+        )
+
+        return {
+            "resume_id": resume.id,
+            "resume_filename": resume.filename,
+            "result": result,
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate cover letter.",
+        )
 @router.post("/{application_id}/cover-letter/{resume_id}")
 def generate_cover_letter(
     application_id: UUID,

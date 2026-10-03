@@ -44,6 +44,9 @@ function Analytics() {
   const [matchAnalytics, setMatchAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [trends, setTrends] = useState(null);
+  const [trendsLoading, setTrendsLoading] = useState(true);
+  const [trendsError, setTrendsError] = useState("");
 
   useEffect(() => {
     async function loadAnalytics() {
@@ -77,7 +80,26 @@ function Analytics() {
     }
 
     loadAnalytics();
+  loadTrends();
   }, []);
+
+  async function loadTrends() {
+    setTrendsLoading(true);
+    setTrendsError("");
+
+    try {
+      const response = await api.get("/analytics/trends");
+      setTrends(response.data);
+    } catch (error) {
+      console.error(error);
+      setTrendsError(
+        error.response?.data?.detail ||
+          "Unable to load application trends."
+      );
+    } finally {
+      setTrendsLoading(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -527,6 +549,210 @@ function Analytics() {
           </ResponsiveContainer>
         </div>
       </section>
+            {/* Advanced Trends */}
+      <section className="mt-8 space-y-8">
+        {/* Trend Overview */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <div>
+            <h2 className="text-lg font-semibold">
+              Application Trends
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Track how your job search activity changes over time.
+            </p>
+          </div>
+
+          {trendsLoading ? (
+            <div className="mt-6 rounded-xl bg-slate-950 p-6 text-center">
+              <p className="text-sm text-slate-400">
+                Loading trends...
+              </p>
+            </div>
+          ) : trendsError ? (
+            <div className="mt-6 rounded-xl border border-red-900 bg-red-950/40 p-5">
+              <p className="text-sm text-red-300">
+                {trendsError}
+              </p>
+            </div>
+          ) : trends ? (
+            <>
+              {/* Trend KPI Cards */}
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <MetricCard
+                  label="Total Applications"
+                  value={trends.total_applications}
+                />
+
+                <MetricCard
+                  label="Active Applications"
+                  value={trends.active_applications}
+                />
+
+                <MetricCard
+                  label="Interview Rate"
+                  value={`${trends.rates.interview_rate}%`}
+                />
+
+                <MetricCard
+                  label="Offer Rate"
+                  value={`${trends.rates.offer_rate}%`}
+                />
+              </div>
+
+              {/* Status Distribution */}
+              <div className="mt-8">
+                <h3 className="text-sm font-semibold text-slate-300">
+                  Status Distribution
+                </h3>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {statuses.map((status) => (
+                    <div
+                      key={status.key}
+                      className="rounded-xl bg-slate-950 p-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-400">
+                          {status.label}
+                        </span>
+
+                        <span className="text-lg font-semibold">
+                          {trends.status_counts?.[status.key] || 0}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+
+                {/* Monthly Application Activity */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <div>
+            <h2 className="text-lg font-semibold">
+              Monthly Application Activity
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Number of applications created each month.
+            </p>
+          </div>
+
+          {trendsLoading ? (
+            <div className="mt-6 rounded-xl bg-slate-950 p-6 text-center">
+              <p className="text-sm text-slate-400">
+                Loading activity...
+              </p>
+            </div>
+          ) : trendsError ? (
+            <div className="mt-6 rounded-xl border border-red-900 bg-red-950/40 p-5">
+              <p className="text-sm text-red-300">
+                {trendsError}
+              </p>
+            </div>
+          ) : trends?.monthly_counts?.length ? (
+            <div className="mt-8 h-[350px] w-full overflow-x-auto">
+              <div
+                style={{
+                  minWidth: `${Math.max(
+                    trends.monthly_counts.length * 100,
+                    700
+                  )}px`,
+                  height: "100%",
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={trends.monthly_counts.map((item) => ({
+                      ...item,
+                      label: formatAnalyticsMonth(item.month),
+                    }))}
+                    margin={{
+                      top: 10,
+                      right: 20,
+                      left: 0,
+                      bottom: 10,
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis
+                      dataKey="label"
+                      tick={{
+                        fill: "#94a3b8",
+                        fontSize: 12,
+                      }}
+                      interval={0}
+                      angle={-30}
+                      textAnchor="end"
+                      height={70}
+                    />
+
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{
+                        fill: "#94a3b8",
+                      }}
+                    />
+
+                    <Tooltip />
+
+                    <Bar
+                      dataKey="count"
+                      name="Applications"
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 rounded-xl bg-slate-950 p-6 text-center">
+              <p className="text-sm text-slate-400">
+                No monthly application data available yet.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Conversion Rates */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <div>
+            <h2 className="text-lg font-semibold">
+              Application Outcome Rates
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Overview of how your applications are progressing.
+            </p>
+          </div>
+
+          {!trendsLoading && trends && (
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <ConversionCard
+                label="Interview Rate"
+                value={`${trends.rates.interview_rate}%`}
+                description="Share of total applications reaching interviews."
+              />
+
+              <ConversionCard
+                label="Offer Rate"
+                value={`${trends.rates.offer_rate}%`}
+                description="Share of total applications resulting in offers."
+              />
+
+              <ConversionCard
+                label="Rejection Rate"
+                value={`${trends.rates.rejection_rate}%`}
+                description="Share of total applications currently rejected."
+              />
+            </div>
+          )}
+        </div>
+      </section>
       <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
         <div>
           <h2 className="text-lg font-semibold">
@@ -791,6 +1017,19 @@ function formatDate(value) {
   ).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatAnalyticsMonth(value) {
+  const [year, month] = value.split("-");
+
+  return new Date(
+    Number(year),
+    Number(month) - 1,
+    1
+  ).toLocaleDateString("en-US", {
+    month: "long",
     year: "numeric",
   });
 }

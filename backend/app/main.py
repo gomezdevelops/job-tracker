@@ -7,6 +7,7 @@ from app.routers.applications import router as applications_router
 from app.routers.analytics import router as analytics_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.resumes import router as resumes_router
+from app.routers.notifications import router as notifications_router
 
 
 app = FastAPI(
@@ -28,6 +29,7 @@ app.include_router(auth_router)
 app.include_router(applications_router)
 app.include_router(analytics_router)
 app.include_router(resumes_router)
+app.include_router(notifications_router)
 
 @app.get("/")
 def root():

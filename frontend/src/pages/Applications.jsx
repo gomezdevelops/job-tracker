@@ -44,6 +44,8 @@ function Applications() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedApplications, setSelectedApplications] = useState([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [priorityRecommendations, setPriorityRecommendations] = useState({});
   const [priorityLoading, setPriorityLoading] = useState({});
   const [priorityErrors, setPriorityErrors] = useState({});
@@ -75,6 +77,35 @@ function Applications() {
     loadApplications();
   }, [status, priority, sortBy, order]);
 
+  function toggleApplicationSelection(applicationId) {
+    setSelectedApplications((current) =>
+      current.includes(applicationId)
+        ? current.filter((id) => id !== applicationId)
+        : [...current, applicationId]
+    );
+  }
+
+  function toggleSelectAll() {
+    const visibleIds = filteredApplications.map(
+      (application) => application.id
+    );
+
+    const allVisibleSelected =
+      visibleIds.length > 0 &&
+      visibleIds.every((id) => selectedApplications.includes(id));
+
+    if (allVisibleSelected) {
+      setSelectedApplications((current) =>
+        current.filter((id) => !visibleIds.includes(id))
+      );
+      return;
+    }
+
+    setSelectedApplications((current) => [
+      ...new Set([...current, ...visibleIds]),
+    ]);
+  }
+
   const filteredApplications = applications.filter(
     (application) => {
       const query = search.toLowerCase();
@@ -90,6 +121,44 @@ function Applications() {
       return matchesSearch;
     }
   );
+  function toggleApplicationSelection(applicationId) {
+    setSelectedApplications((current) =>
+      current.includes(applicationId)
+        ? current.filter((id) => id !== applicationId)
+        : [...current, applicationId]
+    );
+  }
+
+  function toggleSelectAll() {
+    const visibleIds = filteredApplications.map(
+      (application) => application.id
+    );
+
+    const allVisibleSelected =
+      visibleIds.length > 0 &&
+      visibleIds.every((id) => selectedApplications.includes(id));
+
+    if (allVisibleSelected) {
+      setSelectedApplications((current) =>
+        current.filter((id) => !visibleIds.includes(id))
+      );
+      return;
+    }
+
+    setSelectedApplications((current) => [
+      ...new Set([...current, ...visibleIds]),
+    ]);
+  }
+
+  useEffect(() => {
+    const visibleIds = new Set(
+      filteredApplications.map((application) => application.id)
+    );
+
+    setSelectedApplications((current) =>
+      current.filter((id) => visibleIds.has(id))
+    );
+  }, [search, status, priority, sortBy, order, applications]);
 
   async function handlePriorityRecommendation(applicationId) {
     setPriorityLoading((prev) => ({
@@ -125,6 +194,96 @@ function Applications() {
       }));
     }
   }
+  async function handleBulkStatusChange(newStatus) {
+  if (selectedApplications.length === 0) {
+    return;
+  }
+
+  setBulkActionLoading(true);
+
+  try {
+    await api.patch("/applications/bulk/status", {
+      application_ids: selectedApplications,
+      status: newStatus,
+    });
+
+    setSelectedApplications([]);
+    await loadApplications();
+  } catch (error) {
+    console.error(error);
+    alert(
+      error.response?.data?.detail ||
+        "Unable to update application statuses."
+    );
+  } finally {
+    setBulkActionLoading(false);
+  }
+}
+
+
+async function handleBulkPriorityChange(newPriority) {
+  if (selectedApplications.length === 0) {
+    return;
+  }
+
+  setBulkActionLoading(true);
+
+  try {
+    await api.patch("/applications/bulk/priority", {
+      application_ids: selectedApplications,
+      priority: newPriority,
+    });
+
+    setSelectedApplications([]);
+    await loadApplications();
+  } catch (error) {
+    console.error(error);
+    alert(
+      error.response?.data?.detail ||
+        "Unable to update application priorities."
+    );
+  } finally {
+    setBulkActionLoading(false);
+  }
+}
+
+
+async function handleBulkDelete() {
+  if (selectedApplications.length === 0) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete ${selectedApplications.length} selected application${
+      selectedApplications.length === 1 ? "" : "s"
+    }?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  setBulkActionLoading(true);
+
+  try {
+    await api.delete("/applications/bulk", {
+      data: {
+        application_ids: selectedApplications,
+      },
+    });
+
+    setSelectedApplications([]);
+    await loadApplications();
+  } catch (error) {
+    console.error(error);
+    alert(
+      error.response?.data?.detail ||
+        "Unable to delete selected applications."
+    );
+  } finally {
+    setBulkActionLoading(false);
+  }
+}
 
   async function handleDelete(id) {
     const confirmed = window.confirm(
@@ -259,6 +418,110 @@ function Applications() {
           </div>
         </div>
 
+        {/* Selection */}
+        {!loading && filteredApplications.length > 0 && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900 px-5 py-4">
+            <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={
+                  filteredApplications.length > 0 &&
+                  filteredApplications.every((application) =>
+                    selectedApplications.includes(application.id)
+                  )
+                }
+                onChange={toggleSelectAll}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-blue-500 focus:ring-blue-500"
+              />
+              <span>Select All Visible</span>
+            </label>
+
+            {selectedApplications.length > 0 && (
+              <span className="text-sm text-blue-400">
+                {selectedApplications.length} selected
+              </span>
+            )}
+          </div>
+        )}
+
+        {selectedApplications.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-blue-500/30 bg-blue-950/20 p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="font-medium text-white">
+                  {selectedApplications.length} application
+                  {selectedApplications.length === 1 ? "" : "s"} selected
+                </p>
+
+                <p className="mt-1 text-sm text-slate-400">
+                  Apply an action to all selected applications.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {/* Status */}
+                <select
+                  defaultValue=""
+                  disabled={bulkActionLoading}
+                  onChange={(event) => {
+                    if (event.target.value) {
+                      handleBulkStatusChange(event.target.value);
+                      event.target.value = "";
+                    }
+                  }}
+                  className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-300 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">Change Status</option>
+                  <option value="saved">Saved</option>
+                  <option value="applied">Applied</option>
+                  <option value="screening">Screening</option>
+                  <option value="interview">Interview</option>
+                  <option value="offer">Offer</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+
+                {/* Priority */}
+                <select
+                  defaultValue=""
+                  disabled={bulkActionLoading}
+                  onChange={(event) => {
+                    if (event.target.value) {
+                      handleBulkPriorityChange(event.target.value);
+                      event.target.value = "";
+                    }
+                  }}
+                  className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-300 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">Change Priority</option>
+                  <option value="high">High Priority</option>
+                  <option value="medium">Medium Priority</option>
+                  <option value="low">Low Priority</option>
+                </select>
+
+                {/* Delete */}
+                <button
+                  type="button"
+                  disabled={bulkActionLoading}
+                  onClick={handleBulkDelete}
+                  className="rounded-lg border border-red-900 bg-red-950/40 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkActionLoading ? "Processing..." : "Delete Selected"}
+                </button>
+
+                {/* Clear */}
+                <button
+                  type="button"
+                  disabled={bulkActionLoading}
+                  onClick={() => setSelectedApplications([])}
+                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Results */}
         <div className="mt-6">
           {loading && (
@@ -295,6 +558,8 @@ function Applications() {
                   <ApplicationCard
                     key={application.id}
                     application={application}
+                    selected={selectedApplications.includes(application.id)}
+                    onSelect={toggleApplicationSelection}
                     onDelete={handleDelete}
                     onPriorityRecommendation={handlePriorityRecommendation}
                     priorityRecommendation={priorityRecommendations[application.id]}
@@ -312,6 +577,8 @@ function Applications() {
 
 function ApplicationCard({
   application,
+  selected,
+  onSelect,
   onDelete,
   onPriorityRecommendation,
   priorityRecommendation,
@@ -320,18 +587,16 @@ function ApplicationCard({
 }) {
   const [editingPriority, setEditingPriority] = useState(false);
   const [savingPriority, setSavingPriority] = useState(false);
+
   async function handlePriorityChange(event) {
     const newPriority = event.target.value;
 
     setSavingPriority(true);
 
     try {
-      await api.patch(
-        `/applications/${application.id}`,
-        {
-          priority: newPriority,
-        }
-      );
+      await api.patch(`/applications/${application.id}`, {
+        priority: newPriority,
+      });
 
       application.priority = newPriority;
       setEditingPriority(false);
@@ -342,76 +607,87 @@ function ApplicationCard({
       setSavingPriority(false);
     }
   }
-  return (
-    <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-slate-700">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-xl font-semibold">
-              {application.role}
-            </h2>
-            {isUrgentApplication(application) && (
-              <span className="rounded-full bg-red-950 px-3 py-1 text-xs font-medium text-red-300">
-                Urgent
-              </span>
-            )}
 
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                statusStyles[
-                  application.status
-                ]
-              }`}
-            >
-              {
-                statusLabels[
-                  application.status
-                ]
-              }
-            </span>
-            {editingPriority ? (
-              <select
-                autoFocus
-                value={application.priority || "medium"}
-                onChange={handlePriorityChange}
-                onBlur={() => {
-                  if (!savingPriority) {
-                    setEditingPriority(false);
-                  }
-                }}
-                disabled={savingPriority}
-                className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-300 outline-none focus:border-blue-500"
-              >
-                <option value="high">High Priority</option>
-                <option value="medium">Medium Priority</option>
-                <option value="low">Low Priority</option>
-              </select>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setEditingPriority(true)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition hover:opacity-80 ${
-                  priorityStyles[
-                    application.priority || "medium"
-                  ]
+  return (
+    <article
+      className={`rounded-2xl border bg-slate-900 p-6 transition hover:border-slate-700 ${
+        selected
+          ? "border-blue-500/60 ring-1 ring-blue-500/20"
+          : "border-slate-800"
+      }`}
+    >
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        {/* Application information */}
+        <div className="flex min-w-0 items-start gap-4">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onSelect(application.id)}
+            aria-label={`Select ${application.role} at ${application.company}`}
+            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-950 text-blue-500 focus:ring-blue-500"
+          />
+
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-xl font-semibold">
+                {application.role}
+              </h2>
+
+              {isUrgentApplication(application) && (
+                <span className="rounded-full bg-red-950 px-3 py-1 text-xs font-medium text-red-300">
+                  Urgent
+                </span>
+              )}
+
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  statusStyles[application.status]
                 }`}
-                title="Change priority"
               >
-                {
-                  priorityLabels[
-                    application.priority || "medium"
-                  ]
+                {statusLabels[application.status]}
+              </span>
+
+              {editingPriority ? (
+                <select
+                  autoFocus
+                  value={application.priority || "medium"}
+                  onChange={handlePriorityChange}
+                  onBlur={() => {
+                    if (!savingPriority) {
+                      setEditingPriority(false);
+                    }
+                  }}
+                  disabled={savingPriority}
+                  className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-300 outline-none focus:border-blue-500"
+                >
+                  <option value="high">High Priority</option>
+                  <option value="medium">Medium Priority</option>
+                  <option value="low">Low Priority</option>
+                </select>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditingPriority(true)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition hover:opacity-80 ${
+                    priorityStyles[application.priority || "medium"]
+                  }`}
+                  title="Change priority"
+                >
+                  {priorityLabels[application.priority || "medium"]}
+                </button>
+              )}
+
+              <button
+                onClick={() =>
+                  onPriorityRecommendation(application.id)
                 }
+                disabled={priorityLoading}
+                className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-300 transition hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {priorityLoading ? "Analyzing..." : "AI Priority"}
               </button>
-              
-            )}
-            <button
-              onClick={() => onPriorityRecommendation(application.id)}
-              disabled={priorityLoading}
-              className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-300 transition hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {priorityLoading ? "Analyzing..." : "AI Priority"}
-            </button>
+            </div>
+
             {priorityError && (
               <div className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">
                 {priorityError}
@@ -450,68 +726,66 @@ function ApplicationCard({
                     </p>
 
                     <ul className="space-y-2">
-                      {priorityRecommendation.actions.map((action, index) => (
-                        <li
-                          key={index}
-                          className="text-xs leading-5 text-gray-400"
-                        >
-                          • {action}
-                        </li>
-                      ))}
+                      {priorityRecommendation.actions.map(
+                        (action, index) => (
+                          <li
+                            key={index}
+                            className="text-xs leading-5 text-gray-400"
+                          >
+                            • {action}
+                          </li>
+                        )
+                      )}
                     </ul>
                   </div>
                 )}
               </div>
             )}
-            
-          </div>
 
-          <p className="mt-1 text-slate-400">
-            {application.company}
-          </p>
-
-          <div className="mt-4 flex flex-wrap gap-5 text-sm text-slate-500">
-            {application.date_applied && (
-              <span>
-                Applied:{" "}
-                {formatDate(
-                  application.date_applied
-                )}
-              </span>
-            )}
-
-            {application.deadline && (
-              <div className="flex items-center gap-2">
-                <span>
-                  Deadline:{" "}
-                  {formatDate(application.deadline)}
-                </span>
-
-                {(() => {
-                  const deadlineInfo =
-                    getDeadlineInfo(
-                      application.deadline
-                    );
-
-                  return deadlineInfo ? (
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${deadlineInfo.className}`}
-                    >
-                      {deadlineInfo.label}
-                    </span>
-                  ) : null;
-                })()}
-              </div>
-            )}
-          </div>
-
-          {application.notes && (
-            <p className="mt-4 line-clamp-2 text-sm text-slate-400">
-              {application.notes}
+            <p className="mt-1 text-slate-400">
+              {application.company}
             </p>
-          )}
+
+            <div className="mt-4 flex flex-wrap gap-5 text-sm text-slate-500">
+              {application.date_applied && (
+                <span>
+                  Applied:{" "}
+                  {formatDate(application.date_applied)}
+                </span>
+              )}
+
+              {application.deadline && (
+                <div className="flex items-center gap-2">
+                  <span>
+                    Deadline:{" "}
+                    {formatDate(application.deadline)}
+                  </span>
+
+                  {(() => {
+                    const deadlineInfo =
+                      getDeadlineInfo(application.deadline);
+
+                    return deadlineInfo ? (
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${deadlineInfo.className}`}
+                      >
+                        {deadlineInfo.label}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {application.notes && (
+              <p className="mt-4 line-clamp-2 text-sm text-slate-400">
+                {application.notes}
+              </p>
+            )}
+          </div>
         </div>
 
+        {/* Actions */}
         <div className="flex shrink-0 gap-2">
           <Link
             to={`/applications/${application.id}`}
@@ -521,9 +795,7 @@ function ApplicationCard({
           </Link>
 
           <button
-            onClick={() =>
-              onDelete(application.id)
-            }
+            onClick={() => onDelete(application.id)}
             className="rounded-lg border border-red-900 px-4 py-2 text-sm text-red-400 transition hover:bg-red-950"
           >
             Delete

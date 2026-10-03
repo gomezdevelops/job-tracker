@@ -191,3 +191,17 @@ class DashboardFollowUpResponse(BaseModel):
 
     class Config:
         from_attributes = True       
+
+
+class NotificationResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    type: str
+    title: str
+    message: str
+    application_id: UUID | None = None
+    is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
