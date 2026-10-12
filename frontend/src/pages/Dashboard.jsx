@@ -277,6 +277,49 @@ function Dashboard() {
             {user?.email}
           </p>
         </section>
+        {/* Quick Actions */}
+        <section className="mt-8">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Link
+              to="/applications/new"
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-slate-700"
+            >
+              <p className="text-lg font-semibold">
+                Add Application
+              </p>
+
+              <p className="mt-2 text-sm text-slate-400">
+                Track a new job opportunity.
+              </p>
+            </Link>
+
+            <Link
+              to="/applications"
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-slate-700"
+            >
+              <p className="text-lg font-semibold">
+                View Applications
+              </p>
+
+              <p className="mt-2 text-sm text-slate-400">
+                Manage your complete application pipeline.
+              </p>
+            </Link>
+
+            <Link
+              to="/resumes"
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-slate-700"
+            >
+              <p className="text-lg font-semibold">
+                Manage Resumes
+              </p>
+
+              <p className="mt-2 text-sm text-slate-400">
+                Upload and manage your resumes.
+              </p>
+            </Link>
+          </div>
+        </section>
 
         {/* Stats */}
         <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -321,6 +364,7 @@ function Dashboard() {
             }
           />
         </section>
+        
 
         <section className="mt-8">
           <div className="mb-4 flex items-center justify-between">
@@ -1524,50 +1568,6 @@ function Dashboard() {
                 </p>
               )}
             </div>
-          </div>
-        </section>
-
-        {/* Quick Actions */}
-        <section className="mt-8">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Link
-              to="/applications/new"
-              className="rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-slate-700"
-            >
-              <p className="text-lg font-semibold">
-                Add Application
-              </p>
-
-              <p className="mt-2 text-sm text-slate-400">
-                Track a new job opportunity.
-              </p>
-            </Link>
-
-            <Link
-              to="/applications"
-              className="rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-slate-700"
-            >
-              <p className="text-lg font-semibold">
-                View Applications
-              </p>
-
-              <p className="mt-2 text-sm text-slate-400">
-                Manage your complete application pipeline.
-              </p>
-            </Link>
-
-            <Link
-              to="/resumes"
-              className="rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-slate-700"
-            >
-              <p className="text-lg font-semibold">
-                Manage Resumes
-              </p>
-
-              <p className="mt-2 text-sm text-slate-400">
-                Upload and manage your resumes.
-              </p>
-            </Link>
           </div>
         </section>
       </main>
