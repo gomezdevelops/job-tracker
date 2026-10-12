@@ -563,25 +563,30 @@ function ApplicationDetails() {
   }
 
   async function handleTailorResume() {
-    setTailorLoading(true);
-    setTailorError("");
-    setTailoredResume(null);
+    setTailoringLoading(true);
+    setTailoringError("");
+    setTailoringResult(null);
 
     try {
       const response = await api.post(
-        `/applications/${applicationId}/tailor-default-resume`
+        `/applications/${id}/tailor-default-resume`
       );
 
-      setTailoredResume(response.data);
+      console.log("Resume tailoring response:", response.data);
+      console.log(
+        "Resume tailoring result:",
+        JSON.stringify(response.data.result, null, 2)
+      );
+      setTailoringResult(response.data.result);
     } catch (error) {
-      console.error(error);
+      console.error("Resume tailoring error:", error);
 
-      setTailorError(
+      setTailoringError(
         error.response?.data?.detail ||
           "Failed to tailor the resume."
       );
     } finally {
-      setTailorLoading(false);
+      setTailoringLoading(false);
     }
   }
 
@@ -621,10 +626,10 @@ function ApplicationDetails() {
 
     try {
       const response = await api.post(
-        `/applications/${applicationId}/cover-letter-default-resume`
+        `/applications/${id}/cover-letter-default-resume`
       );
 
-      setCoverLetter(response.data);
+      setCoverLetter(response.data.result);
     } catch (error) {
       console.error(error);
 
@@ -2067,10 +2072,8 @@ function ApplicationDetails() {
               ) : (
                 <div className="mt-6 space-y-3">
                   {matchHistory.map((match, index) => (
-                    <button
-                      type="button"
+                    <div
                       key={match.id}
-                      onClick={() => handleViewMatch(match.id)}
                       className="w-full text-left flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-950 p-5 transition hover:border-slate-600 hover:bg-slate-900 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div>
@@ -2128,7 +2131,7 @@ function ApplicationDetails() {
                           </button>
                         )}
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}

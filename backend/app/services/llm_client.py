@@ -1,8 +1,7 @@
 import json
-import os
-
 from openai import OpenAI
 
+from app.config import settings
 
 AI_ANALYSIS_SCHEMA = {
     "type": "object",
@@ -64,17 +63,16 @@ AI_ANALYSIS_SCHEMA = {
 
 
 def is_ai_configured() -> bool:
-    return bool(os.getenv("OPENAI_API_KEY"))
+    return bool(settings.openai_api_key.strip())
 
 
 def get_openai_client() -> OpenAI:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = settings.openai_api_key.strip()
 
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not configured.")
 
     return OpenAI(api_key=api_key)
-
 
 def analyze_with_ai(
     resume_text: str,
@@ -83,7 +81,7 @@ def analyze_with_ai(
     client = get_openai_client()
 
     response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
+        model=settings.openai_model,
         input=[
             {
                 "role": "system",
@@ -124,7 +122,7 @@ def analyze_job_description_with_ai(
     client = get_openai_client()
 
     response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
+        model=settings.openai_model,
         input=[
             {
                 "role": "system",
@@ -217,7 +215,7 @@ def tailor_resume_with_ai(
     client = get_openai_client()
 
     response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
+        model=settings.openai_model,
         input=[
             {
                 "role": "system",
@@ -307,7 +305,7 @@ def generate_cover_letter_with_ai(
     client = get_openai_client()
 
     response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
+        model=settings.openai_model,
         input=[
             {
                 "role": "system",
@@ -371,7 +369,7 @@ def generate_application_insights_with_ai(
     client = get_openai_client()
 
     response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
+        model=settings.openai_model,
         input=[
             {
                 "role": "system",
@@ -456,7 +454,7 @@ def generate_interview_prep_with_ai(
     }
 
     response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
+        model=settings.openai_model,
         input=[
             {
                 "role": "system",
@@ -574,7 +572,7 @@ def recommend_application_priority_with_ai(
     client = get_openai_client()
 
     response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
+        model=settings.openai_model,
         input=[
             {
                 "role": "system",

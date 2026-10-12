@@ -627,11 +627,13 @@ def generate_cover_letter_default_resume(
             "result": result,
         }
 
-    except Exception:
+    except Exception as exc:
+        print(f"Cover letter error (default resume): {type(exc).__name__}: {exc}")
         raise HTTPException(
             status_code=502,
             detail="Failed to generate cover letter.",
-        )
+        ) from exc
+    
 @router.post("/{application_id}/cover-letter/{resume_id}")
 def generate_cover_letter(
     application_id: UUID,
@@ -697,11 +699,12 @@ def generate_cover_letter(
 
         return result
 
-    except Exception:
+    except Exception as exc:
+        print(f"Cover letter error (selected resume): {type(exc).__name__}: {exc}")
         raise HTTPException(
             status_code=502,
             detail="Failed to generate cover letter.",
-        )
+        ) from exc
 
 @router.post(
     "/{application_id}/follow-ups",
@@ -1352,11 +1355,15 @@ def generate_interview_prep(
 
         return result
 
-    except Exception:
+    except Exception as exc:
+        print(
+            f"Interview preparation error: "
+            f"{type(exc).__name__}: {exc}"
+        )
         raise HTTPException(
             status_code=502,
             detail="Failed to generate interview preparation.",
-        )
+        ) from exc
     
 @router.get(
     "/{application_id}/matches/check/{resume_id}",
