@@ -167,6 +167,10 @@ function ApplicationDetails() {
   const [defaultMatch, setDefaultMatch] = useState(null);
   const [defaultMatchLoading, setDefaultMatchLoading] = useState(false);
   const [defaultMatchError, setDefaultMatchError] = useState("");
+  const [jobIntelligence, setJobIntelligence] = useState(null);
+  const [jobIntelligenceLoading, setJobIntelligenceLoading] = useState(false);
+  const [jobIntelligenceError, setJobIntelligenceError] = useState("");
+  const [jobIntelligenceRefreshing, setJobIntelligenceRefreshing] = useState(false);
 
   useEffect(() => {
     async function loadResumes() {
@@ -816,6 +820,42 @@ function ApplicationDetails() {
       );
     }
   }
+  async function loadJobIntelligence(refresh = false) {
+    if (refresh) {
+      setJobIntelligenceRefreshing(true);
+    } else {
+      setJobIntelligenceLoading(true);
+    }
+
+    setJobIntelligenceError("");
+
+    try {
+      const response = await api.get(
+        `/applications/${id}/job-intelligence`,
+        {
+          params: { refresh },
+        }
+      );
+
+      setJobIntelligence(response.data);
+    } catch (error) {
+      setJobIntelligenceError(
+        error.response?.data?.detail ||
+          "Unable to load job intelligence."
+      );
+    } finally {
+      setJobIntelligenceLoading(false);
+      setJobIntelligenceRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    if (form.jd_text?.trim()) {
+      loadJobIntelligence();
+    } else {
+      setJobIntelligence(null);
+    }
+  }, [id, form.jd_text]);
 
   async function handleEditActivity(eventId) {
     const note = editingNote.trim();
@@ -3324,6 +3364,214 @@ function ApplicationDetails() {
             )}
           </div>
         </section>
+        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold">Job Intelligence</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Understand the requirements and important keywords in this job description.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadJobIntelligence(true)}
+              disabled={jobIntelligenceLoading || jobIntelligenceRefreshing || !form.jd_text?.trim()}
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {jobIntelligenceRefreshing ? "Refreshing..." : "Refresh analysis"}
+            </button>
+          </div>
+
+          {jobIntelligenceLoading && (
+            <p className="mt-6 text-sm text-slate-400">Analyzing job description...</p>
+          )}
+
+          {jobIntelligenceError && (
+            <p className="mt-6 rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+              {jobIntelligenceError}
+            </p>
+          )}
+
+          {!form.jd_text?.trim() && (
+            <p className="mt-6 text-sm text-slate-400">
+              Add a job description to unlock Job Intelligence.
+            </p>
+          )}
+
+          {!jobIntelligenceLoading && jobIntelligence && (
+            <div className="mt-6 space-y-6">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-slate-100">
+                      Resume Skill Gap Analysis
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Compare your selected resume against this job's requirements.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleMatch}
+                    disabled={matching || !selectedResume || !form.jd_text?.trim()}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {matching ? "Analyzing..." : "Analyze Resume"}
+                  </button>
+                </div>
+
+                {!selectedResume && (
+                  <p className="mt-4 text-sm text-yellow-400">
+                    Upload or select a resume in the Resume Match section first.
+                  </p>
+                )}
+
+                {matchError && (
+                  <p className="mt-4 text-sm text-red-400">{matchError}</p>
+                )}
+
+                {matchResult && (
+                  <div className="mt-5 space-y-5">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-lg bg-slate-900 p-4">
+                        <p className="text-sm text-slate-400">Overall match</p>
+                        <p className="mt-2 text-2xl font-semibold text-blue-400">
+                          {matchResult.score ?? 0}%
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-slate-900 p-4">
+                        <p className="text-sm text-slate-400">Matched skills</p>
+                        <p className="mt-2 text-2xl font-semibold text-green-400">
+                          {matchResult.matched_skills?.length ?? 0}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg bg-slate-900 p-4">
+                        <p className="text-sm text-slate-400">Missing skills</p>
+                        <p className="mt-2 text-2xl font-semibold text-red-400">
+                          {matchResult.missing_skills?.length ?? 0}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="mb-2 text-sm font-medium text-slate-200">
+                        Skills to highlight
+                      </h4>
+
+                      {matchResult.matched_skills?.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {matchResult.matched_skills.map((skill) => (
+                            <span
+                              key={skill}
+                              className="rounded-full border border-green-800 bg-green-950/40 px-3 py-1.5 text-xs text-green-300"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">
+                          No matching skills detected yet.
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className="mb-2 text-sm font-medium text-slate-200">
+                        Skills to develop or demonstrate
+                      </h4>
+
+                      {matchResult.missing_skills?.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {matchResult.missing_skills.map((skill) => (
+                            <span
+                              key={skill}
+                              className="rounded-full border border-red-800 bg-red-950/40 px-3 py-1.5 text-xs text-red-300"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-green-400">
+                          No missing skills detected by the current matcher.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ["Experience", jobIntelligence.required_experience_years != null
+                    ? `${jobIntelligence.required_experience_years}+ years`
+                    : "Not detected"],
+                  ["Seniority", jobIntelligence.seniority || "Not detected"],
+                  ["Education", jobIntelligence.education || "Not detected"],
+                  ["Work mode", jobIntelligence.work_mode || "Not detected"],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-2 font-medium capitalize text-slate-200">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {[
+                ["Required skills", jobIntelligence.required_skills],
+                ["Preferred skills", jobIntelligence.preferred_skills],
+                ["Technologies", jobIntelligence.technologies],
+                ["Keywords", jobIntelligence.keywords],
+              ].map(([title, items]) => (
+                <div key={title}>
+                  <h3 className="mb-3 text-sm font-semibold text-slate-200">{title}</h3>
+                  {items?.length ? (
+                    <div className="flex flex-wrap">
+                      {items.map((item) => (
+                        <span
+                          key={item}
+                          className="mb-2 mr-2 inline-flex rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs text-slate-300"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No items detected.</p>
+                  )}
+                </div>
+              ))}
+
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-slate-200">Responsibilities</h3>
+                {jobIntelligence.responsibilities?.length ? (
+                  <ul className="list-disc space-y-2 pl-5 text-sm text-slate-300">
+                    {jobIntelligence.responsibilities.map((item, index) => (
+                      <li key={`${index}-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No responsibility bullets detected. Try refreshing after checking the job description.
+                  </p>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Analysis is rule-based unless an AI provider is configured. Last analyzed:{" "}
+                {jobIntelligence.created_at
+                  ? new Date(jobIntelligence.created_at).toLocaleString()
+                  : "Unknown"}
+              </p>
+            </div>
+          )}
+        </section>
+
 
         {/* Application Timeline */}
         <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">

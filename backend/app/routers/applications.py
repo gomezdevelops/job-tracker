@@ -48,6 +48,9 @@ from app.services.application_insights import build_application_insights
 from datetime import datetime, timedelta
 from app.models.follow_up import FollowUp
 from app.schemas import FollowUpCreate, FollowUpUpdate, FollowUpResponse
+from app.services.job_intelligence_service import (
+    get_or_create_job_intelligence,
+)
 
 def get_priority_suggestion(score: int | None) -> str | None:
     if score is None:
@@ -348,6 +351,65 @@ def analyze_application_jd(
     return analyze_job_description_full(
         application.jd_text
     )
+
+@router.get("/{application_id}/job-intelligence")
+def get_application_job_intelligence(
+    application_id: UUID,
+    refresh: bool = Query(default=False),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    application = (
+        db.query(Application)
+        .filter(
+            Application.id == application_id,
+            Application.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not application:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found.",
+        )
+
+    if not application.jd_text or not application.jd_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="This application has no job description.",
+        )
+
+    try:
+        record, cached = get_or_create_job_intelligence(
+            db=db,
+            application=application,
+            force_refresh=refresh,
+        )
+
+        return {
+            "id": record.id,
+            "application_id": record.application_id,
+            "jd_hash": record.jd_hash,
+            "required_skills": record.required_skills,
+            "preferred_skills": record.preferred_skills,
+            "technologies": record.technologies,
+            "responsibilities": record.responsibilities,
+            "keywords": record.keywords,
+            "required_experience_years": record.required_experience_years,
+            "seniority": record.seniority,
+            "education": record.education,
+            "work_mode": record.work_mode,
+            "ai_analysis": record.ai_analysis,
+            "created_at": record.created_at,
+            "cached": cached,
+        }
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
 
 @router.post(
     "/{application_id}/tailor-default-resume",
