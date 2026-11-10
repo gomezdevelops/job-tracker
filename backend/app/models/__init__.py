@@ -6,3 +6,4 @@ from app.models.resume_match import ResumeMatch
 from app.models.follow_up import FollowUp
 from app.models.job_intelligence import JobIntelligence
 from app.models.notification import Notification
+from app.models.email_otp import EmailOTP
