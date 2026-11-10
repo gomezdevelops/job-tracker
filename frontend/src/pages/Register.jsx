@@ -186,7 +186,13 @@ function Register() {
 
     try {
       await register(email, password);
-      navigate("/dashboard");
+
+      navigate("/login", {
+        state: {
+          registered: true,
+          email,
+        },
+      });
     } catch (error) {
       setError(
         error.response?.data?.detail || "Unable to create your account."

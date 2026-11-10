@@ -13,38 +13,29 @@ from app.database import get_db
 from app.models import User
 
 
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/auth/login",
-)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(
-    plain_password: str,
-    hashed_password: str,
-) -> bool:
-    return pwd_context.verify(
-        plain_password,
-        hashed_password,
-    )
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 
 def create_access_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
+    now = datetime.now(timezone.utc)
 
     payload = {
         "sub": user_id,
-        "exp": expire,
+        "type": "access",
+        "iat": now,
+        "exp": now + timedelta(
+            minutes=settings.access_token_expire_minutes
+        ),
     }
 
     return jwt.encode(
@@ -52,6 +43,53 @@ def create_access_token(user_id: str) -> str:
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )
+
+
+def create_pre_auth_token(
+    user_id: str,
+    challenge_id: str,
+) -> str:
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "sub": user_id,
+        "challenge_id": challenge_id,
+        "type": "otp_verification",
+        "iat": now,
+        "exp": now + timedelta(
+            minutes=settings.pre_auth_token_expire_minutes
+        ),
+    }
+
+    return jwt.encode(
+        payload,
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def decode_pre_auth_token(token: str) -> tuple[uuid.UUID, uuid.UUID]:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+
+        if payload.get("type") != "otp_verification":
+            raise ValueError("Invalid token type")
+
+        user_id = uuid.UUID(payload["sub"])
+        challenge_id = uuid.UUID(payload["challenge_id"])
+
+        return user_id, challenge_id
+
+    except (JWTError, ValueError, KeyError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired verification session.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def get_current_user(
@@ -71,6 +109,9 @@ def get_current_user(
             algorithms=[settings.jwt_algorithm],
         )
 
+        if payload.get("type") != "access":
+            raise credentials_exception
+
         user_id = payload.get("sub")
 
         if not user_id:
@@ -78,7 +119,7 @@ def get_current_user(
 
         user_uuid = uuid.UUID(user_id)
 
-    except (JWTError, ValueError):
+    except (JWTError, ValueError, TypeError):
         raise credentials_exception
 
     user = db.scalar(

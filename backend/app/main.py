@@ -8,11 +8,20 @@ from app.routers.analytics import router as analytics_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.resumes import router as resumes_router
 from app.routers.notifications import router as notifications_router
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.limiter import limiter
 
 
 app = FastAPI(
     title="Job Tracker API",
     version="1.0.0",
+)
+
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
 )
 app.add_middleware(
     CORSMiddleware,

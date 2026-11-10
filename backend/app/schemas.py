@@ -24,6 +24,26 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+class OTPChallengeResponse(BaseModel):
+    message: str
+    challenge_id: uuid.UUID
+    pre_auth_token: str
+    expires_in: int = 300
+    resend_after: int = 60
+
+
+class OTPVerifyRequest(BaseModel):
+    challenge_id: uuid.UUID
+    otp: str = Field(
+        min_length=6,
+        max_length=6,
+        pattern=r"^[0-9]{6}$",
+    )
+
+
+class OTPResendRequest(BaseModel):
+    challenge_id: uuid.UUID
+
 class ApplicationStatus(str, Enum):
     SAVED = "saved"
     APPLIED = "applied"
