@@ -1,8 +1,15 @@
 import uuid
-import os
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func, Boolean
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    func,
+    Boolean,
+    Integer,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,9 +71,7 @@ class Resume(Base):
         default=False,
     )
 
-    @property
-    def file_size(self) -> int | None:
-        try:
-            return os.path.getsize(self.file_path)
-        except (FileNotFoundError, OSError):
-            return None
+    file_size: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
